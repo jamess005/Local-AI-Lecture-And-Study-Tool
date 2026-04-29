@@ -28,7 +28,7 @@ jobs:
         run: ruff check .
 
       - name: Syntax check (py_compile)
-        run: python -m py_compile main.py recorder.py transcriber.py improver.py logger.py
+        run: python -m py_compile src/app.py src/recorder.py src/transcriber.py src/improver.py src/logger.py
 
   dockerfile-lint:
     name: Dockerfile lint
@@ -86,6 +86,8 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Smoke-test imports
+        env:
+          PYTHONPATH: src
         run: |
           python -c "
           from recorder import Recorder

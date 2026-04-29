@@ -44,8 +44,9 @@ LICENSE
 voiceagent.desktop
 run.sh
 
-# Linting config (only used in CI)
+# Dev/CI tooling (not needed at runtime)
 pyproject.toml
+.github/
 
 # Git worktrees
 .worktrees/

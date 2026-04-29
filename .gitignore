@@ -51,6 +51,3 @@ Thumbs.db
 # Logs
 *.log
 logs/
-
-#docs
-docs/

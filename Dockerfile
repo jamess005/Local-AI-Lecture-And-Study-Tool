@@ -19,4 +19,4 @@ ENV DISPLAY=:0
 ENV WHISPER_MODEL=small
 ENV MODEL_PATH=/models
 
-CMD ["python3", "main.py"]
+CMD ["python3", "src/app.py"]
