@@ -1,0 +1,4 @@
+[tool.ruff.lint]
+# E402: module-level import not at top of file — intentional in improver.py
+# to configure GPU env vars before importing torch/transformers.
+ignore = ["E402"]
