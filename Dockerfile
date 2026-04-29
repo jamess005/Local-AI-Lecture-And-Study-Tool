@@ -3,7 +3,7 @@ FROM rocm/pytorch:rocm7.1_ubuntu22.04_py3.11_pytorch_2.4.0
 WORKDIR /app
 
 # System deps
-RUN apt-get update && apt-get install -y python3-tk xclip && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends python3-tk xclip && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

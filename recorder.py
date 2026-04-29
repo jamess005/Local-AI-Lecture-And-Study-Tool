@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import sounddevice as sd
 from dotenv import load_dotenv
