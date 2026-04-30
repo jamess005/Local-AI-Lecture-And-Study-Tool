@@ -93,8 +93,6 @@ class Improver:
         self._model.eval()
 
     def improve(self, raw_text: str, role: str = "Software Engineer", mode: str = "Instruct") -> str:
-        if self._model is None:
-            raise RuntimeError("Model not loaded")
         persona = ROLE_PROMPTS.get(role, ROLE_PROMPTS["Software Engineer"])
         fmt = MODE_FORMATS.get(mode, MODE_FORMATS["Instruct"])
         system = persona + "\n\n" + fmt
@@ -102,6 +100,33 @@ class Improver:
             {"role": "system", "content": system},
             {"role": "user", "content": raw_text},
         ]
+        return self._generate(messages, max_new_tokens=512)
+
+    def generate_question(self, note_content: str, style: str = "Flashcard") -> str:
+        from study_prompts import FLASHCARD_QUESTION, EXTENDED_QUESTION
+        system = FLASHCARD_QUESTION if style == "Flashcard" else EXTENDED_QUESTION
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": note_content},
+        ]
+        return self._generate(messages, max_new_tokens=128)
+
+    def evaluate_answer(self, question: str, note_content: str, spoken_answer: str) -> str:
+        from study_prompts import EVALUATE_ANSWER
+        user_content = (
+            f"Question: {question}\n\n"
+            f"Note:\n{note_content}\n\n"
+            f"Student's answer: {spoken_answer}"
+        )
+        messages = [
+            {"role": "system", "content": EVALUATE_ANSWER},
+            {"role": "user", "content": user_content},
+        ]
+        return self._generate(messages, max_new_tokens=256)
+
+    def _generate(self, messages: list[dict], max_new_tokens: int = 512) -> str:
+        if self._model is None:
+            raise RuntimeError("Model not loaded")
         text = self._tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
@@ -109,7 +134,7 @@ class Improver:
         with torch.no_grad():
             output_ids = self._model.generate(
                 **inputs,
-                max_new_tokens=512,
+                max_new_tokens=max_new_tokens,
                 do_sample=False,
             )
         generated = output_ids[0][inputs["input_ids"].shape[1]:]
