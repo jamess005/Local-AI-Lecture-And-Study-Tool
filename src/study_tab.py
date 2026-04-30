@@ -123,7 +123,13 @@ class StudyTab:
             self._setup_frame, text="Start →", width=140, height=44,
             font=("Helvetica", 14, "bold"), command=self._on_start,
         )
-        self._start_btn.pack(anchor="w")
+        self._start_btn.pack(side="left", anchor="w")
+
+        self._manage_btn = ctk.CTkButton(
+            self._setup_frame, text="Manage exclusions", width=160, height=44,
+            fg_color="#555", command=self._open_exclusions_window,
+        )
+        self._manage_btn.pack(side="left", anchor="w", padx=(12, 0))
 
         # ── Session widgets ──────────────────────────────────────────────────
         self._session_frame = ctk.CTkFrame(self._frame, fg_color="transparent")
@@ -355,3 +361,47 @@ class StudyTab:
             target=save_exclusions, args=(self._excluded,), daemon=True
         ).start()
         self._on_next()
+
+    def _open_exclusions_window(self):
+        if not self._excluded:
+            self._status.configure(text="No notes are currently excluded.")
+            return
+
+        win = ctk.CTkToplevel(self._frame)
+        win.title("Excluded notes")
+        win.geometry("420x400")
+        win.resizable(False, True)
+
+        ctk.CTkLabel(
+            win, text="Excluded notes", font=("Helvetica", 14, "bold")
+        ).pack(anchor="w", padx=16, pady=(12, 4))
+        ctk.CTkLabel(
+            win, text="Click Restore to put a note back in the study pool.",
+            font=("Helvetica", 11), text_color="gray",
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        scroll = ctk.CTkScrollableFrame(win, height=300)
+        scroll.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+
+        def make_restore(key: str, row: ctk.CTkFrame):
+            def restore():
+                self._excluded.discard(key)
+                threading.Thread(
+                    target=save_exclusions, args=(self._excluded,), daemon=True
+                ).start()
+                row.destroy()
+                if not self._excluded:
+                    win.destroy()
+                    self._status.configure(text="All exclusions cleared.")
+            return restore
+
+        for key in sorted(self._excluded):
+            row = ctk.CTkFrame(scroll, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+            ctk.CTkLabel(
+                row, text=key.replace("/", " › "), font=("Helvetica", 12), anchor="w"
+            ).pack(side="left", fill="x", expand=True)
+            ctk.CTkButton(
+                row, text="Restore", width=80, height=30,
+                fg_color="#2e7d32", command=make_restore(key, row),
+            ).pack(side="right")
