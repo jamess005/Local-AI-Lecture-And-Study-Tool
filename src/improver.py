@@ -5,10 +5,10 @@ load_dotenv()
 os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 import torch
 
-MODEL_PATH = os.getenv("MODEL_PATH", "/home/james/ml-proj/models/qwen2.5-3b-instruct")
+MODEL_PATH = os.getenv("MODEL_PATH", "/home/james/ml-proj/models/llama-3.1-8b-instruct")
 
 ROLE_PROMPTS = {
     "Software Engineer": (
@@ -85,9 +85,10 @@ class Improver:
 
     def load(self):
         self._tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+        bnb_config = BitsAndBytesConfig(load_in_8bit=True)
         self._model = AutoModelForCausalLM.from_pretrained(
             MODEL_PATH,
-            dtype=torch.float16,
+            quantization_config=bnb_config,
             device_map={"": "cuda:0"},
         )
         self._model.eval()
@@ -110,6 +111,14 @@ class Improver:
             {"role": "user", "content": note_content},
         ]
         return self._generate(messages, max_new_tokens=128)
+
+    def generate_notes(self, transcription: str) -> str:
+        from note_prompts import GENERATE_NOTES
+        messages = [
+            {"role": "system", "content": GENERATE_NOTES},
+            {"role": "user", "content": transcription},
+        ]
+        return self._generate(messages, max_new_tokens=2560)
 
     def evaluate_answer(self, question: str, note_content: str, spoken_answer: str) -> str:
         from study_prompts import EVALUATE_ANSWER

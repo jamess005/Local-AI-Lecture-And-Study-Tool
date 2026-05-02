@@ -7,6 +7,7 @@ from transcriber import Transcriber
 from improver import Improver, ROLE_PROMPTS, MODES
 from logger import log_session
 from study_tab import StudyTab
+from notes_tab import NotesTab
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -104,6 +105,10 @@ class App(ctk.CTk):
         # ── Study tab ────────────────────────────────────────────────────────
         study_tab = self._tabs.add("Study")
         StudyTab(study_tab, self._recorder, self._transcriber, self._improver)
+
+        # ── Notes tab ────────────────────────────────────────────────────────
+        notes_tab = self._tabs.add("Notes")
+        NotesTab(notes_tab, self._recorder, self._transcriber, self._improver)
 
     def _set_idle_buttons(self):
         for w in self._btn_frame.winfo_children():
