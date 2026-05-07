@@ -1,18 +1,19 @@
-# Voice Prompt Agent
+# Voice Study Agent
 
-A local desktop app that turns rough spoken ideas into clean, structured AI prompts. Speak into your microphone, hit Stop, then Improve — the app transcribes your speech and rewrites it as a formatted Markdown prompt using a local LLM.
-
-Runs entirely offline. No API keys. No cloud.
+A local desktop study tool with three tabs: generate structured notes from lecture recordings, study them with AI-generated questions and voice answers, and improve rough spoken ideas into clean AI prompts. Runs entirely offline — no API keys, no cloud.
 
 ---
 
-## How It Works
+## Tabs
 
-1. **Record** — press Record, speak, press Stop
-2. **Improve** — sends your transcription to a local Qwen 2.5 3B model
-3. **Copy** — paste the structured Markdown prompt into Claude Code, ChatGPT, etc.
+### Notes
+Record a lecture or paste a transcript, then hit **Generate**. The app sends the transcript through an incremental pipeline that produces structured TOPIC: blocks — one block per concept and one per worked exercise. Save individual notes or all at once as Obsidian-compatible Markdown files under `~/uni/<subject>/`.
 
-Multiple recordings accumulate in the text box before you improve — useful for building up context across several thoughts.
+### Study
+Select a saved note and generate a flashcard or extended question. Answer by voice or text. The app evaluates your answer against the note content and gives a score with feedback.
+
+### Improve
+Speak a rough coding or AI task, hit **Improve**. The app transcribes your speech and rewrites it as a structured Markdown prompt (Goal / Requirements / Context). Choose a role persona to tailor the output style.
 
 ---
 
@@ -20,12 +21,12 @@ Multiple recordings accumulate in the text box before you improve — useful for
 
 | Dependency | Version |
 |---|---|
-| Python | 3.12+ |
-| ROCm | 7.x (AMD GPU) |
-| PyTorch | 2.11.0+rocm7.2 |
+| Python | 3.11+ |
+| ROCm | 7.1 (AMD GPU) |
+| PyTorch | 2.4.0+rocm7.1 |
 | xclip | any (for clipboard support) |
 
-**Hardware:** AMD GPU with ROCm support and ≥4 GB VRAM (tested on RX 7800 XT with 16 GB).
+**Hardware:** AMD GPU with ROCm support and ≥8 GB VRAM recommended (tested on RX 7800 XT with 16 GB). Whisper runs on CPU.
 
 ---
 
@@ -37,30 +38,30 @@ git clone https://github.com/jamess005/voice-prompt-agent.git
 cd voice-prompt-agent
 
 # 2. Install system deps
-sudo apt install python3-tk xclip
+sudo apt install python3-tk xclip libportaudio2
 
 # 3. Create venv
 python3 -m venv .venv
 
 # 4. Install ROCm PyTorch
-.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/rocm7.2
+.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/rocm7.1
 
 # 5. Install remaining deps
 .venv/bin/pip install -r requirements.txt
 
 # 6. Configure
 cp .env.example .env
-# Edit .env — set MODEL_PATH to your local Qwen 2.5 3B instruct model directory
+# Edit .env — set MODEL_PATH to your local model directory
 ```
 
 ---
 
 ## Configuration
 
-| Variable | Default | Description |
-|---|---|---|
-| `MODEL_PATH` | `/home/james/ml-proj/models/qwen2.5-3b-instruct` | Path to local Qwen 2.5 3B instruct model |
-| `WHISPER_MODEL` | `small` | Whisper model size (`tiny`, `base`, `small`, `medium`) |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `MODEL_PATH` | Yes | — | Path to local Qwen 3.5 9B instruct model directory |
+| `WHISPER_MODEL` | No | `small` | Whisper model size (`tiny`, `base`, `small`, `medium`) |
 
 ---
 
@@ -71,7 +72,7 @@ cp .env.example .env
 ./run.sh
 
 # Or directly
-.venv/bin/python3 main.py
+.venv/bin/python3 src/app.py
 ```
 
 To add it to your application menu (Linux Mint / GNOME):
@@ -85,14 +86,14 @@ cp voiceagent.desktop ~/.local/share/applications/
 ## Docker (GPU + display required)
 
 ```bash
-docker build -t voice-prompt-agent .
+docker build -t voice-study-agent .
 
 docker run --device=/dev/kfd --device=/dev/dri \
   --device=/dev/snd \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v /path/to/models:/models \
   -e DISPLAY=$DISPLAY \
-  voice-prompt-agent
+  voice-study-agent
 ```
 
 ---
@@ -100,22 +101,29 @@ docker run --device=/dev/kfd --device=/dev/dri \
 ## Project Structure
 
 ```
-voice-prompt-agent/
-├── main.py          # Desktop UI (customtkinter)
-├── recorder.py      # Microphone capture (sounddevice)
-├── transcriber.py   # Speech-to-text (faster-whisper, CPU)
-├── improver.py      # Prompt improvement (Qwen 2.5 3B, ROCm GPU)
-├── logger.py        # Session logging to logs/YYYY-MM-DD.jsonl
-├── run.sh           # Launch script
-├── voiceagent.desktop  # Linux desktop entry
+voice-study-agent/
+├── src/
+│   ├── app.py           # Entry point, tab layout (customtkinter)
+│   ├── notes_tab.py     # Notes generation UI
+│   ├── study_tab.py     # Study / Q&A UI
+│   ├── improver.py      # LLM inference: note generation, improve, evaluate
+│   ├── note_prompts.py  # Prompts for note generation pipeline
+│   ├── study_prompts.py # Prompts for question generation and answer evaluation
+│   ├── note_reader.py   # Load saved notes from ~/uni/
+│   ├── confidence.py    # Per-note confidence tracking
+│   ├── recorder.py      # Microphone capture (sounddevice)
+│   ├── transcriber.py   # Speech-to-text (faster-whisper, CPU)
+│   └── logger.py        # Session logging to logs/YYYY-MM-DD.jsonl
+├── run.sh
+├── voiceagent.desktop
 ├── Dockerfile
 ├── requirements.txt
-└── .env             # Local config (gitignored)
+└── .env                 # Local config (gitignored)
 ```
 
 ---
 
-## Roles
+## Improve — Roles
 
 Select a persona before hitting Improve to tailor the output style:
 

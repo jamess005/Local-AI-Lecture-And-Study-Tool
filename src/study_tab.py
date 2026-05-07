@@ -9,32 +9,59 @@ from confidence import (
 )
 
 _LATEX_SYMBOLS = [
+    # \mathbb — before any commands that share a prefix
+    (r"\mathbb{N}", "ℕ"), (r"\mathbb{Z}", "ℤ"), (r"\mathbb{R}", "ℝ"),
+    (r"\mathbb{Q}", "ℚ"), (r"\mathbb{C}", "ℂ"), (r"\mathbb{P}", "ℙ"),
     # Set operations
+    (r"\bigoplus", "⊕"), (r"\oplus", "⊕"),
     (r"\cup", "∪"), (r"\cap", "∩"), (r"\setminus", "∖"), (r"\emptyset", "∅"),
-    (r"\bigoplus", "⊕"), (r"\oplus", "⊕"), (r"\triangle", "△"),
-    # Relations
+    (r"\triangle", "△"),
+    # Relations — longer forms before any that share a prefix
     (r"\subseteq", "⊆"), (r"\supseteq", "⊇"), (r"\subset", "⊂"), (r"\supset", "⊃"),
-    (r"\in", "∈"), (r"\notin", "∉"),
-    # Logic
-    (r"\forall", "∀"), (r"\exists", "∃"), (r"\neg", "¬"), (r"\land", "∧"), (r"\lor", "∨"),
-    (r"\Rightarrow", "⟹"), (r"\rightarrow", "→"),
-    (r"\Leftrightarrow", "⟺"), (r"\leftrightarrow", "↔"),
+    (r"\notin", "∉"),
+    (r"\infty", "∞"),   # before \in
+    (r"\int", "∫"),     # before \in
+    (r"\in", "∈"),
+    (r"\neq", "≠"), (r"\leq", "≤"), (r"\geq", "≥"),
+    (r"\approx", "≈"), (r"\equiv", "≡"), (r"\sim", "∼"), (r"\cong", "≅"),
+    # Logic & arrows — longer forms first
+    (r"\Leftrightarrow", "⟺"), (r"\Rightarrow", "⟹"),
+    (r"\leftrightarrow", "↔"), (r"\rightarrow", "→"), (r"\leftarrow", "←"),
+    (r"\mapsto", "↦"),
+    (r"\forall", "∀"), (r"\exists", "∃"),
+    (r"\neg", "¬"), (r"\land", "∧"), (r"\lor", "∨"),
     # Misc math
-    (r"\times", "×"), (r"\infty", "∞"), (r"\mathbb{N}", "ℕ"), (r"\mathbb{Z}", "ℤ"),
-    (r"\mathbb{R}", "ℝ"), (r"\mathbb{Q}", "ℚ"),
+    (r"\times", "×"), (r"\div", "÷"), (r"\pm", "±"), (r"\cdot", "·"),
+    (r"\ldots", "…"), (r"\dots", "…"),
+    (r"\sum", "∑"), (r"\prod", "∏"), (r"\partial", "∂"),
+    (r"\sqrt", "√"),
+    # Greek — var- forms before base forms
+    (r"\varepsilon", "ε"), (r"\vartheta", "θ"), (r"\varphi", "φ"),
+    (r"\alpha", "α"), (r"\beta", "β"), (r"\gamma", "γ"), (r"\delta", "δ"),
+    (r"\epsilon", "ε"), (r"\zeta", "ζ"), (r"\eta", "η"), (r"\theta", "θ"),
+    (r"\iota", "ι"), (r"\kappa", "κ"), (r"\lambda", "λ"), (r"\mu", "μ"),
+    (r"\nu", "ν"), (r"\xi", "ξ"), (r"\pi", "π"), (r"\rho", "ρ"),
+    (r"\sigma", "σ"), (r"\tau", "τ"), (r"\upsilon", "υ"), (r"\phi", "φ"),
+    (r"\chi", "χ"), (r"\psi", "ψ"), (r"\omega", "ω"),
+    (r"\Gamma", "Γ"), (r"\Delta", "Δ"), (r"\Theta", "Θ"), (r"\Lambda", "Λ"),
+    (r"\Xi", "Ξ"), (r"\Pi", "Π"), (r"\Sigma", "Σ"), (r"\Upsilon", "Υ"),
+    (r"\Phi", "Φ"), (r"\Psi", "Ψ"), (r"\Omega", "Ω"),
     # Braces
     (r"\{", "{"), (r"\}", "}"),
 ]
 
 
 def _render_latex(text: str) -> str:
-    """Replace common LaTeX math commands with Unicode equivalents."""
+    # Structural commands with arguments — apply before symbol table
+    text = re.sub(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", r"\1/\2", text)
+    text = re.sub(r"\\sqrt\{([^{}]+)\}", r"√\1", text)
+    text = re.sub(r"\\text\{([^{}]+)\}", r"\1", text)
+    # Symbol replacements
     for latex, symbol in _LATEX_SYMBOLS:
         text = text.replace(latex, symbol)
-    # Strip \(...\) and \[...\] delimiters
+    # Strip math delimiters
     text = re.sub(r"\\\(|\\\)", "", text)
     text = re.sub(r"\\\[|\\\]", "", text)
-    # Strip $...$ and $$...$$ delimiters
     text = re.sub(r"\$\$|\$", "", text)
     return text
 

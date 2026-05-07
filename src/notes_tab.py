@@ -7,11 +7,27 @@ import customtkinter as ctk
 from note_reader import DEFAULT_NOTES_DIR
 
 
-def _strip_latex_delims(text: str) -> str:
-    text = re.sub(r"\\\(|\\\)", "", text)
-    text = re.sub(r"\\\[|\\\]", "", text)
-    text = re.sub(r"\$\$|\$", "", text)
-    return text
+def _normalize_math_delims(text: str) -> str:
+    # 1. Convert \(...\) and \[...\] to $...$
+    text = re.sub(r"\\\((.+?)\\\)", r"$\1$", text, flags=re.DOTALL)
+    text = re.sub(r"\\\[(.+?)\\\]", r"$\1$", text, flags=re.DOTALL)
+    # 2. Normalise every $...$ region:
+    #    - strip surrounding spaces ("$ f $" → "f", "$ \mathbb{R} $" → "$\mathbb{R}$")
+    #    - keep only if content contains a backslash command (real LaTeX);
+    #      plain-text content ("$f$", "$A$", "$x = 2$") is unwrapped
+    def _fix_dollar(m: re.Match) -> str:
+        content = m.group(1).strip()
+        return f"${content}$" if "\\" in content else content
+    text = re.sub(r"\$([^$]+)\$", _fix_dollar, text)
+    # 3. Wrap any remaining bare \commands not already inside $...$
+    parts = re.split(r"(\$[^$]+\$)", text)
+    fixed = []
+    for i, part in enumerate(parts):
+        if i % 2 == 1:
+            fixed.append(part)
+        else:
+            fixed.append(re.sub(r"(\\[a-zA-Z]+(?:\{[^{}]*\})*)", r"$\1$", part))
+    return "".join(fixed)
 
 _NEW_SUBJECT = "＋ New subject"
 _STANDALONE = "(standalone)"
@@ -31,6 +47,7 @@ class NotesTab:
         self._state = IDLE
         self._blocks: list[dict] = []
         self._notes_shown = False
+        self._main_topic: str | None = None
 
         self._build_ui(parent)
 
@@ -64,6 +81,14 @@ class NotesTab:
     def _bind_scroll(self, widget):
         widget.bind("<Button-4>", lambda _e: self._scroll(-1))
         widget.bind("<Button-5>", lambda _e: self._scroll(1))
+        for attr in ("_textbox", "_canvas", "_entry"):
+            inner = getattr(widget, attr, None)
+            if inner is not None:
+                try:
+                    inner.bind("<Button-4>", lambda _e: self._scroll(-1))
+                    inner.bind("<Button-5>", lambda _e: self._scroll(1))
+                except Exception:
+                    pass
         for child in widget.winfo_children():
             self._bind_scroll(child)
 
@@ -135,6 +160,11 @@ class NotesTab:
         ctk.CTkButton(
             self._btn_row, text="Clear", width=80, height=40,
             fg_color="#555", command=self._on_clear_transcription,
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            self._btn_row, text="Copy", width=80, height=40,
+            fg_color="#555", command=self._on_copy_transcript,
         ).pack(side="left")
 
         # Generated notes area — hidden until first generation
@@ -149,9 +179,17 @@ class NotesTab:
         )
         self._save_btn.pack(side="right")
 
+        ctk.CTkButton(
+            self._notes_header, text="Copy all", width=90, height=34,
+            fg_color="#555", font=("Helvetica", 12),
+            command=self._on_copy_all_notes,
+        ).pack(side="right", padx=(0, 6))
+
         self._notes_scroll = ctk.CTkScrollableFrame(self._frame, fg_color="transparent")
         self._notes_scroll.bind("<Button-4>", lambda _e: self._scroll(-1))
         self._notes_scroll.bind("<Button-5>", lambda _e: self._scroll(1))
+        self._notes_scroll._parent_canvas.bind("<Button-4>", lambda _e: self._scroll(-1))
+        self._notes_scroll._parent_canvas.bind("<Button-5>", lambda _e: self._scroll(1))
 
     # ── Subject selector ──────────────────────────────────────────────────────
 
@@ -238,7 +276,7 @@ class NotesTab:
     def _on_notes_ready(self, raw: str):
         sections = self._parse_topics(raw)
         # Strip LaTeX delimiters the model adds (\( ... \), $...$)
-        sections = [(name, _strip_latex_delims(content)) for name, content in sections]
+        sections = [(name, _normalize_math_delims(content)) for name, content in sections]
 
         generated_names = [s[0] for s in sections]
         subject = self._subject_var.get()
@@ -249,10 +287,13 @@ class NotesTab:
         for w in self._notes_scroll.winfo_children():
             w.destroy()
         self._blocks = []
+        self._main_topic = None
 
         for topic_name, content in sections:
-            merge_options = [_STANDALONE] + [n for n in generated_names if n != topic_name]
+            other_generated = [n for n in generated_names if n != topic_name]
+            merge_options = [_STANDALONE] + sorted(set(existing) | set(other_generated))
             block = self._build_block(topic_name, content, merge_options, link_options)
+            block.update_idletasks()
             self._bind_scroll(block)
 
         if not self._notes_shown:
@@ -317,11 +358,13 @@ class NotesTab:
                 as_label.pack(side="left", padx=(0, 4))
                 as_menu.pack(side="left")
 
-        ctk.CTkOptionMenu(
+        merge_menu = ctk.CTkComboBox(
             row1, values=merge_options, variable=merge_var,
-            width=160, font=("Helvetica", 11),
-            command=on_merge_change,
-        ).pack(side="left", padx=(0, 8))
+            width=180, font=("Helvetica", 11),
+            state="readonly", command=on_merge_change,
+        )
+        merge_menu.set(_STANDALONE)
+        merge_menu.pack(side="left", padx=(0, 8))
 
         # ── Note textbox — sized to content so all text is visible without internal scroll ──
         line_count = max(len(content.splitlines()), 1)
@@ -353,21 +396,48 @@ class NotesTab:
         ctk.CTkButton(
             row3, text="Insert", width=70, height=28,
             font=("Helvetica", 11), command=insert_link,
+        ).pack(side="left", padx=(0, 6))
+
+        def _do_copy():
+            self._frame.clipboard_clear()
+            self._frame.clipboard_append(box.get("1.0", "end").strip())
+
+        ctk.CTkButton(
+            row3, text="Copy", width=70, height=28,
+            font=("Helvetica", 11), command=_do_copy,
+        ).pack(side="left", padx=(0, 6))
+
+        block_dict: dict = {}
+
+        main_btn = ctk.CTkButton(
+            row3, text="◯ Main", width=80, height=28,
+            fg_color="#555", font=("Helvetica", 11),
+            command=lambda: self._on_set_main(block_dict),
+        )
+        main_btn.pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            row3, text="Delete", width=70, height=28,
+            fg_color="#8B2020", font=("Helvetica", 11),
+            command=lambda: self._on_delete_block(block, block_dict),
         ).pack(side="left")
 
-        self._blocks.append({
+        block_dict.update({
             "topic_entry": entry,
             "merge_var": merge_var,
+            "merge_menu": merge_menu,
             "label_var": label_var,
             "textbox": box,
+            "main_btn": main_btn,
         })
+        self._blocks.append(block_dict)
         return block
 
     def _parse_topics(self, text: str) -> list[tuple[str, str]]:
         import re
-        # Match any of: "TOPIC: X", "**Topic: X**", "# Topic: X", "1. **Topic: X**"
+        # Match any of: "TOPIC: X", "**Topic: X**", "# Topic: X", "### TOPIC: X", "1. **Topic: X**"
         _TOPIC_RE = re.compile(
-            r"^(?:\d+\.\s*)?(?:\*{1,2})?(?:TOPIC|Topic|topic)\s*:\s*(?:\*{1,2})?\s*(.+?)\s*\*{0,2}$"
+            r"^(?:#{1,6}\s*)?(?:\d+\.\s*)?(?:\*{1,2})?(?:TOPIC|Topic|topic)\s*:\s*(?:\*{1,2})?\s*(.+?)\s*\*{0,2}$"
         )
 
         sections: list[tuple[str, str]] = []
@@ -393,6 +463,18 @@ class NotesTab:
 
     # ── Save ──────────────────────────────────────────────────────────────────
 
+    def _refresh_merge_menus(self, subject: str):
+        existing = self._subject_note_names(subject) if subject != _NEW_SUBJECT else []
+        generated_names = [b["topic_entry"].get().strip() for b in self._blocks]
+        for b in self._blocks:
+            topic_name = b["topic_entry"].get().strip()
+            other_generated = [n for n in generated_names if n != topic_name]
+            options = [_STANDALONE] + sorted(set(existing) | set(other_generated))
+            b["merge_menu"].configure(values=options)
+            if b["merge_var"].get() not in options:
+                b["merge_var"].set(_STANDALONE)
+                b["merge_menu"].set(_STANDALONE)
+
     def _on_save(self):
         if self._subject_var.get() == _NEW_SUBJECT:
             subject = self._new_subject_entry.get().strip()
@@ -413,11 +495,14 @@ class NotesTab:
             for b in self._blocks
         ]
 
-        # Standalone notes form the base files
+        # Standalone notes form the base files; prepend [[main_topic]] wikilink if set
         final: dict[str, str] = {}
         for bd in block_data:
             if bd["merge_into"] == _STANDALONE and bd["topic"] and bd["content"]:
-                final[bd["topic"]] = bd["content"]
+                content = bd["content"]
+                if self._main_topic and bd["topic"] != self._main_topic:
+                    content = f"[[{self._main_topic}]]\n\n{content}"
+                final[bd["topic"]] = content
 
         # Merged notes are appended as sub-sections
         for bd in block_data:
@@ -436,6 +521,21 @@ class NotesTab:
             path.write_text(content, encoding="utf-8")
             saved.append(topic)
 
+        # Append into existing on-disk notes
+        for bd in block_data:
+            target = bd["merge_into"]
+            if target == _STANDALONE or target in final or not bd["content"]:
+                continue
+            target_path = Path(DEFAULT_NOTES_DIR) / subject / f"{target}.md"
+            if not target_path.exists():
+                continue
+            existing_text = target_path.read_text(encoding="utf-8")
+            target_path.write_text(
+                existing_text.rstrip() + f"\n\n## {bd['section_label']}: {bd['topic']}\n{bd['content']}",
+                encoding="utf-8",
+            )
+            saved.append(f"{bd['topic']} → {target}")
+
         if not saved:
             self._status.configure(text="No valid notes to save.")
             return
@@ -446,10 +546,49 @@ class NotesTab:
             self._subject_var.set(subject)
             self._new_subject_entry.grid_forget()
 
+        self._refresh_merge_menus(subject)
         plural = "s" if len(saved) != 1 else ""
         self._status.configure(text=f"Saved {len(saved)} note{plural} → {subject}/")
 
     # ── Misc ──────────────────────────────────────────────────────────────────
+
+    def _on_copy_transcript(self):
+        text = self._transcription_box.get("1.0", "end").strip()
+        if text:
+            self._frame.clipboard_clear()
+            self._frame.clipboard_append(text)
+
+    def _on_copy_all_notes(self):
+        parts = []
+        for b in self._blocks:
+            topic = b["topic_entry"].get().strip()
+            content = b["textbox"].get("1.0", "end").strip()
+            if topic and content:
+                parts.append(f"## {topic}\n\n{content}")
+        if parts:
+            self._frame.clipboard_clear()
+            self._frame.clipboard_append("\n\n---\n\n".join(parts))
+
+    def _on_delete_block(self, block_frame: ctk.CTkFrame, block_dict: dict):
+        topic = block_dict["topic_entry"].get().strip()
+        if self._main_topic == topic:
+            self._main_topic = None
+        if block_dict in self._blocks:
+            self._blocks.remove(block_dict)
+        block_frame.destroy()
+        subject = self._subject_var.get()
+        self._refresh_merge_menus(subject)
+
+    def _on_set_main(self, block_dict: dict):
+        topic = block_dict["topic_entry"].get().strip()
+        if self._main_topic == topic:
+            self._main_topic = None
+            block_dict["main_btn"].configure(text="◯ Main")
+        else:
+            self._main_topic = topic
+            for b in self._blocks:
+                b["main_btn"].configure(text="◯ Main")
+            block_dict["main_btn"].configure(text="✓ Main")
 
     def _on_clear_transcription(self):
         self._transcription_box.delete("1.0", "end")

@@ -28,7 +28,7 @@ jobs:
         run: ruff check .
 
       - name: Syntax check (py_compile)
-        run: python -m py_compile src/app.py src/recorder.py src/transcriber.py src/improver.py src/logger.py
+        run: python -m py_compile src/app.py src/recorder.py src/transcriber.py src/improver.py src/logger.py src/notes_tab.py src/study_tab.py src/note_reader.py src/confidence.py src/note_prompts.py src/study_prompts.py
 
   dockerfile-lint:
     name: Dockerfile lint
@@ -88,12 +88,17 @@ jobs:
       - name: Smoke-test imports
         env:
           PYTHONPATH: src
+          MODEL_PATH: /fake/path
         run: |
           python -c "
           from recorder import Recorder
           from transcriber import Transcriber
           from improver import Improver, ROLE_PROMPTS, MODES
           from logger import log_session
+          from note_reader import load_notes, DEFAULT_NOTES_DIR
+          from confidence import ConfidenceTracker
+          from note_prompts import ACCUMULATE_PROMPT, VERIFY_EXAMPLES_PROMPT
+          from study_prompts import EVALUATE_ANSWER
           assert len(ROLE_PROMPTS) == 6
           assert len(MODES) > 0
           print('All imports OK')
