@@ -24,7 +24,7 @@ ROLES = list(ROLE_PROMPTS.keys())
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Voice Prompt")
+        self.title("Lecture & Study Tool")
         self.geometry("820x600")
         self.resizable(True, True)
         self.minsize(600, 440)
