@@ -148,7 +148,8 @@ The model is loaded on demand when you first use a tab that needs it, and unload
 To add a desktop launcher on Linux Mint / GNOME:
 
 ```bash
-cp voiceagent.desktop ~/.local/share/applications/
+sed "s|/path/to/voiceagent|$(pwd)|g" voiceagent.desktop \
+  > ~/.local/share/applications/voiceagent.desktop
 ```
 
 ---
