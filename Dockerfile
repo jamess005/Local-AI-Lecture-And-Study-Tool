@@ -18,5 +18,6 @@ USER appuser
 ENV DISPLAY=:0
 ENV WHISPER_MODEL=small
 ENV MODEL_PATH=/models
+ENV NOTES_DIR=/notes
 
 CMD ["python3", "src/app.py"]

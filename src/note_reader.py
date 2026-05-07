@@ -2,7 +2,7 @@ import os
 import random
 from pathlib import Path
 
-DEFAULT_NOTES_DIR = os.path.expanduser("~/uni")
+DEFAULT_NOTES_DIR = os.path.expanduser(os.environ.get("NOTES_DIR", "~/notes"))
 
 
 def load_notes(notes_dir: str = DEFAULT_NOTES_DIR) -> dict[str, dict[str, str]]:

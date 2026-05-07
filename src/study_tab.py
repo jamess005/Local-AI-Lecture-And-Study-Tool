@@ -284,7 +284,7 @@ class StudyTab:
         notes = self._filtered_notes()
         if not notes:
             self._status.configure(
-                text="No notes available — all excluded or ~/uni/ is empty."
+                text="No notes found — check NOTES_DIR or generate some notes first."
             )
             return
         mode = self._sel_var.get()

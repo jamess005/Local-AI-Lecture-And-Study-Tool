@@ -8,7 +8,7 @@ An offline desktop application that records lectures, generates structured notes
 
 The three tabs share a single local LLM (Qwen 3.5 9B, 4-bit quantised) loaded on demand. Speech-to-text uses faster-whisper running on CPU, so the GPU stays free for the language model.
 
-Notes are saved to `~/uni/<subject>/<topic>.md` as plain Markdown — compatible with any Obsidian vault pointed at that directory. The Study tab reads those same files directly. When you designate a "Main note" in the Notes tab, all other notes saved in that session have `[[MainTopic]]` prepended, creating Obsidian backlinks that connect related concepts automatically.
+Notes are saved as plain Markdown files under the directory set by `NOTES_DIR` — point this at your Obsidian vault and the notes appear there immediately. The Study tab reads from the same directory. When you designate a "Main note" in the Notes tab, all other notes saved in that session have `[[MainTopic]]` prepended, creating Obsidian backlinks that connect related concepts automatically.
 
 Confidence scores are tracked per note in `data/confidence.json` and feed back into the Study tab's random selection so weaker notes appear more often.
 
@@ -27,7 +27,7 @@ Record lecture audio or paste an existing transcript, then hit **Generate**. The
 
 Output is a set of TOPIC blocks: one per named concept, one per worked exercise. Each block can be:
 
-- **Saved individually** — writes `~/uni/<subject>/<topic>.md`
+- **Saved individually** — writes `<NOTES_DIR>/<subject>/<topic>.md`
 - **Save All** — saves every block in one go
 - **Main note** — toggle on one block to designate it as the session anchor; all other saves in that session prepend `[[AnchorTopic]]` as an Obsidian backlink
 - **Copy all** — copies all blocks to the clipboard
@@ -39,7 +39,7 @@ The transcript itself has a **Copy** button so you can keep the raw source along
 
 ## Study tab
 
-Reads notes from `~/uni/`. Select a subject from the dropdown or let the app choose randomly or by confidence weighting (lower-scoring notes appear more often).
+Reads notes from `NOTES_DIR`. Select a subject from the dropdown or let the app choose randomly or by confidence weighting (lower-scoring notes appear more often).
 
 **Question types:**
 - **Flashcard** — a concise recall question
@@ -101,8 +101,8 @@ Multiple recordings accumulate in the text box before you hit Improve, which is 
 
 ```bash
 # 1. Clone
-git clone https://github.com/jamess005/voice-prompt-agent.git
-cd voice-prompt-agent
+git clone https://github.com/jamess005/Local-AI-Lecture-And-Study-Tool.git
+cd Local-AI-Lecture-And-Study-Tool
 
 # 2. Install system dependencies
 sudo apt install python3-tk xclip libportaudio2
@@ -118,7 +118,7 @@ python3 -m venv .venv
 
 # 6. Configure
 cp .env.example .env
-# Edit .env — set MODEL_PATH to the directory containing your local model
+# Edit .env — set MODEL_PATH and NOTES_DIR
 ```
 
 ---
@@ -127,7 +127,8 @@ cp .env.example .env
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `MODEL_PATH` | Yes | — | Path to your local Qwen 3.5 9B instruct model directory |
+| `MODEL_PATH` | Yes | — | Path to your local model directory |
+| `NOTES_DIR` | No | `~/notes` | Where notes are saved and read from. Point this at your Obsidian vault. |
 | `WHISPER_MODEL` | No | `small` | Whisper model size: `tiny`, `base`, `small`, `medium` |
 
 The model is loaded on demand when you first use a tab that needs it, and unloaded after note generation completes to free VRAM.
@@ -166,8 +167,8 @@ docker run --device=/dev/kfd --device=/dev/dri \
   --device=/dev/snd \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v /path/to/models:/models \
-  -v "$HOME/uni":/home/appuser/uni \
-  -v "$HOME/.voiceagent-data":/app/data \
+  -v /path/to/your/notes:/notes \
+  -v /path/to/data:/app/data \
   -e DISPLAY=$DISPLAY \
   local-ai-study-tool
 ```
@@ -177,10 +178,10 @@ docker run --device=/dev/kfd --device=/dev/dri \
 | Host path | Container path | Purpose |
 |---|---|---|
 | `/path/to/models` | `/models` | LLM weights (matched to `MODEL_PATH=/models`) |
-| `~/uni` | `/home/appuser/uni` | Notes — persisted between runs |
-| `~/.voiceagent-data` | `/app/data` | Confidence scores and exclusions |
+| `/path/to/your/notes` | `/notes` | Notes directory (matched to `NOTES_DIR=/notes`) — persisted between runs |
+| `/path/to/data` | `/app/data` | Confidence scores and exclusions — persisted between runs |
 
-Without the `~/uni` and `~/.voiceagent-data` mounts, notes and confidence data are lost when the container exits. The container runs as `appuser` (UID 1001), so note paths inside the container expand to `/home/appuser/uni`.
+Without the notes and data mounts, notes and confidence scores are lost when the container exits.
 
 ---
 
@@ -188,7 +189,7 @@ Without the `~/uni` and `~/.voiceagent-data` mounts, notes and confidence data a
 
 | Path | Contents |
 |---|---|
-| `~/uni/<subject>/<topic>.md` | Saved notes (Obsidian-compatible Markdown) |
+| `$NOTES_DIR/<subject>/<topic>.md` | Saved notes (Obsidian-compatible Markdown) |
 | `data/confidence.json` | Per-note confidence scores |
 | `data/exclusions.json` | Notes excluded from the study pool |
 | `logs/YYYY-MM-DD.jsonl` | Improve-tab session log |
@@ -208,7 +209,7 @@ voiceagent/
 │   ├── improver.py      # LLM inference: note generation, improve, evaluate
 │   ├── note_prompts.py  # Prompts for the note generation pipeline
 │   ├── study_prompts.py # Prompts for question generation and answer evaluation
-│   ├── note_reader.py   # Load saved notes from ~/uni/
+│   ├── note_reader.py   # Load saved notes from NOTES_DIR
 │   ├── confidence.py    # Per-note confidence tracking and exclusions
 │   ├── recorder.py      # Microphone capture (sounddevice)
 │   ├── transcriber.py   # Speech-to-text (faster-whisper, CPU)
