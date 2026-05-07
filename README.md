@@ -1,6 +1,6 @@
 # Local AI Lecture & Study Tool
 
-An offline desktop application that records lectures, generates structured notes, and lets you study them with AI-generated questions answered by voice. Also includes a prompt-improvement tab for dictating rough coding or AI tasks. Everything runs locally — no API keys, no cloud, no internet required.
+An offline desktop application that uses lecture transcriptions, generates structured notes, and lets you study them with AI-generated questions answered by voice. Also includes a prompt-improvement tab for dictating rough coding or AI tasks. Everything runs locally — no API keys, no cloud, no internet required.
 
 ---
 
@@ -16,7 +16,7 @@ Confidence scores are tracked per note in `data/confidence.json` and feed back i
 
 ## Notes tab
 
-Record lecture audio or paste an existing transcript, then hit **Generate**. The pipeline runs in the background:
+Paste a lecture transcript into the notes tab, then hit **Generate**. The pipeline runs in the background:
 
 1. Identify the lecture subject from the first ~300 words
 2. Chunk the transcript at paragraph and sentence boundaries
