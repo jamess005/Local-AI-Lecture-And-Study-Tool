@@ -170,7 +170,6 @@ class Improver:
 
     def _extract_exercise_blocks(self, transcript: str) -> list[str]:
         """One focused model call per exercise, detected by 'pause the video' markers."""
-        import re
         from note_prompts import EXERCISE_EXTRACT_PROMPT
         words = transcript.split()
         markers = [
@@ -197,8 +196,8 @@ class Improver:
             if topic:
                 # Strip any TOPIC: line the model produced and impose the correct one
                 content = "\n".join(
-                    l for l in raw.splitlines()
-                    if not l.strip().upper().startswith("TOPIC:")
+                    line for line in raw.splitlines()
+                    if not line.strip().upper().startswith("TOPIC:")
                 ).strip()
                 if content:
                     results.append(f"TOPIC: {topic}\n{content}")
@@ -241,7 +240,8 @@ class Improver:
 
     def _topic_similarity(self, a: str, b: str) -> float:
         import re
-        norm = lambda s: set(re.sub(r'[^a-z0-9 ]', '', s).split())
+        def norm(s):
+            return set(re.sub(r'[^a-z0-9 ]', '', s).split())
         wa, wb = norm(a), norm(b)
         if not wa or not wb:
             return 0.0
@@ -290,8 +290,8 @@ class Improver:
             return True
         lines = result.splitlines()
         content_lines = [
-            l for l in lines
-            if not l.strip().upper().startswith("TOPIC:")
+            line for line in lines
+            if not line.strip().upper().startswith("TOPIC:")
         ]
         body = " ".join(content_lines).strip().rstrip(".!")
         return body.upper() == "SKIP" or not body
