@@ -13,13 +13,17 @@ Examine the new chunk and decide:
 2. If the chunk provides a clear illustrative example for a concept already in the notes \
    BUT that concept block has no Example section → output ONLY the updated block, \
    with the Example section added. Change nothing else in the block. \
-   CRITICAL: only include an example if it contains explicit values stated verbatim in the chunk. \
-   Do not invent, infer, or generalise. If no concrete example with real values exists in the chunk, \
-   output nothing. \
+   CRITICAL: copy example values EXACTLY as they appear word-for-word in the chunk — same function, \
+   same numbers, same notation. Do not substitute, paraphrase, or use values from prior notes, \
+   prior chunks, or training knowledge. If the exact values are not present verbatim in this chunk, \
+   write no Example section. \
    Use values from one example only — do not mix values from two different examples in the chunk \
    (e.g. do not use the co-domain from the 2x+1 example with the domain from the string example).
 3. If the concept is already in the notes AND already has an Example section → output nothing for that concept. \
-   Each TOPIC block may contain at most one Example section.
+   Each TOPIC block may contain at most one Example section. \
+   Exception: if a chunk introduces a numbered list of laws, properties, or identities for a concept \
+   already in the notes, and those laws are not yet in the definition, output the updated block with \
+   ALL laws listed in the definition sentences — do not truncate to one.
 4. If the chunk is a standalone exercise (contains "pause the video", is a summary, \
    logistics, or greetings) → output nothing.
 
@@ -28,10 +32,14 @@ One response, one block per decision. Do not combine two concepts into one block
 === TOPIC RULES ===
 Domain, Co-domain, and Range are three separate topics — never combine them. \
 Image and Pre-image are two separate topics — never combine them. \
+Exponential Growth (b > 1) and Exponential Decay (b < 1) are two separate topics — never combine them. \
+Increasing Linear Function and Decreasing Linear Function are two separate topics — never combine them. \
 TOPIC names are short noun phrases: "Function", "Domain", "Co-domain", "Range", \
 "Image", "Pre-image", "Relations That Are Not Functions". \
 Never write "Definition of X" — just "X". \
-Do not comment on source text quality or transcription errors.
+Do not comment on source text quality or transcription errors. \
+The TOPIC name must accurately reflect the mathematical content of the block — a property of \
+quadratic functions cannot be named as a property of linear functions, and vice versa.
 
 Write every definition sentence with the concept name as the grammatical subject. \
 Say "Co-domain is the set of all possible outputs" — NOT "The co-domain of f is ℤ". \
@@ -58,6 +66,9 @@ For each Example section:
 - Check that all values are internally consistent within the example \
   (e.g. if the co-domain is {1,2,3,4,5,6}, no output value can be 9 or 7).
 - Check that the example actually illustrates the concept named in the TOPIC heading.
+- Check that the TOPIC name accurately describes the mathematical content of the block. \
+  If the definition and example describe quadratic behaviour but the TOPIC says "Linear", \
+  correct the TOPIC name to match the content.
 - If you find an error, correct only the specific wrong value or line.
 - If an example mixes values from two different problems, remove the inconsistent values \
   or replace them with consistent ones derived from the example's own stated facts.
