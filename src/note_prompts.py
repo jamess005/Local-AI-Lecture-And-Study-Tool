@@ -9,33 +9,43 @@ The user message contains CURRENT NOTES (in TOPIC: block format) and a NEW CHUNK
 
 Examine the new chunk and decide:
 
-1. If the chunk introduces a concept not yet in the current notes → output a new TOPIC block.
+1. If the chunk introduces one or more concepts not yet in the current notes → output one TOPIC block \
+   per new concept. A single chunk may produce multiple blocks. Never collapse two distinct concepts \
+   into one block.
 2. If the chunk provides a clear illustrative example for a concept already in the notes \
    BUT that concept block has no Example section → output ONLY the updated block, \
    with the Example section added. Change nothing else in the block. \
-   CRITICAL: copy example values EXACTLY as they appear word-for-word in the chunk — same function, \
-   same numbers, same notation. Do not substitute, paraphrase, or use values from prior notes, \
-   prior chunks, or training knowledge. If the exact values are not present verbatim in this chunk, \
-   write no Example section. \
+   CRITICAL: the NEW CHUNK section is your only permitted source for example values. \
+   Copy values EXACTLY as they appear word-for-word in the NEW CHUNK — same function, same numbers, \
+   same notation. Values that appear only in the CURRENT NOTES section must not be used. \
+   Do not substitute, paraphrase, or use values from training knowledge. \
+   If the exact values are not present verbatim in the NEW CHUNK, write no Example section. \
    Use values from one example only — do not mix values from two different examples in the chunk \
    (e.g. do not use the co-domain from the 2x+1 example with the domain from the string example).
 3. If the concept is already in the notes AND already has an Example section → output nothing for that concept. \
-   Each TOPIC block may contain at most one Example section. \
-   Exception: if a chunk introduces a numbered list of laws, properties, or identities for a concept \
-   already in the notes, and those laws are not yet in the definition, output the updated block with \
-   ALL laws listed in the definition sentences — do not truncate to one.
+   Each TOPIC block may contain at most one Example section.
+3b. If the chunk introduces a numbered or enumerated list of laws, identities, or properties for any \
+   concept (whether or not it is already in the notes), output that concept's block in this exact format:
+   TOPIC: <concept name>
+   <One sentence stating what these laws govern.>
+   Laws:
+   - <law 1, as a mathematical statement>
+   - <law 2>
+   (continue for ALL laws — never truncate)
+   Example:
+   - <one concrete numerical application from the NEW CHUNK>
 4. If the chunk is a standalone exercise (contains "pause the video", is a summary, \
    logistics, or greetings) → output nothing.
 
-One response, one block per decision. Do not combine two concepts into one block.
+Do not combine two distinct concepts into one block.
 
 === TOPIC RULES ===
 Domain, Co-domain, and Range are three separate topics — never combine them. \
 Image and Pre-image are two separate topics — never combine them. \
 Exponential Growth (b > 1) and Exponential Decay (b < 1) are two separate topics — never combine them. \
 Increasing Linear Function and Decreasing Linear Function are two separate topics — never combine them. \
-TOPIC names are short noun phrases: "Function", "Domain", "Co-domain", "Range", \
-"Image", "Pre-image", "Relations That Are Not Functions". \
+TOPIC names are short noun phrases that use the lecturer's own terminology — \
+e.g. "Linear Function", "Exponential Decay", "Laws of Exponential Functions", "Domain". \
 Never write "Definition of X" — just "X". \
 Do not comment on source text quality or transcription errors. \
 The TOPIC name must accurately reflect the mathematical content of the block — a property of \
