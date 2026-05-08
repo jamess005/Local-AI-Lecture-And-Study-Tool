@@ -185,6 +185,18 @@ class NotesTab:
             command=self._on_copy_all_notes,
         ).pack(side="right", padx=(0, 6))
 
+        self._link_all_btn = ctk.CTkButton(
+            self._notes_header, text="Link all", width=90, height=34,
+            font=("Helvetica", 12), command=self._on_link_all,
+        )
+        self._link_all_btn.pack(side="right", padx=(0, 4))
+
+        self._link_entry = ctk.CTkEntry(
+            self._notes_header, placeholder_text="Link topic…",
+            width=160, font=("Helvetica", 12),
+        )
+        self._link_entry.pack(side="right", padx=(0, 4))
+
         self._notes_scroll = ctk.CTkScrollableFrame(self._frame, fg_color="transparent")
         self._notes_scroll.bind("<Button-4>", lambda _e: self._scroll(-1))
         self._notes_scroll.bind("<Button-5>", lambda _e: self._scroll(1))
@@ -288,6 +300,7 @@ class NotesTab:
             w.destroy()
         self._blocks = []
         self._main_topic = None
+        self._link_entry.delete(0, "end")
 
         for topic_name, content in sections:
             other_generated = [n for n in generated_names if n != topic_name]
@@ -568,6 +581,20 @@ class NotesTab:
         if parts:
             self._frame.clipboard_clear()
             self._frame.clipboard_append("\n\n---\n\n".join(parts))
+
+    def _on_link_all(self):
+        topic = self._link_entry.get().strip()
+        if not topic:
+            return
+        wikilink = f"[[{topic}]]\n\n"
+        for b in self._blocks:
+            box = b["textbox"]
+            current = box.get("1.0", "end").rstrip("\n")
+            if not current.startswith(f"[[{topic}]]"):
+                box.delete("1.0", "end")
+                box.insert("1.0", wikilink + current)
+        self._link_all_btn.configure(text="Linked ✓")
+        self._frame.after(1500, lambda: self._link_all_btn.configure(text="Link all"))
 
     def _on_delete_block(self, block_frame: ctk.CTkFrame, block_dict: dict):
         topic = block_dict["topic_entry"].get().strip()
