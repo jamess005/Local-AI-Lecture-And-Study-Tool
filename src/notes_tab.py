@@ -140,7 +140,7 @@ class _SearchableCombo(ctk.CTkFrame):
             self._lb.selection_set(0)
 
     def _on_enter(self, _=None):
-        if self._lb and (sel := self._lb.curselection()):
+        if self._lb and self._lb.curselection():
             self._pick(self._lb)
 
     def _pick(self, lb: tk.Listbox):

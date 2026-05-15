@@ -1,4 +1,6 @@
-import sys, os, traceback, datetime
+import os
+import traceback
+import datetime
 
 LOG = open("/tmp/load_test.log", "w", buffering=1)
 

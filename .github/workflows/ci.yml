@@ -97,7 +97,7 @@ jobs:
           from logger import log_session
           from note_reader import load_notes, DEFAULT_NOTES_DIR
           from confidence import load_scores, score_key
-          from note_prompts import ACCUMULATE_PROMPT, VERIFY_EXAMPLES_PROMPT
+          from note_prompts import SINGLE_PASS_PROMPT, SINGLE_NOTE_PROMPT, VERIFY_EXAMPLES_PROMPT
           from study_prompts import EVALUATE_ANSWER
           assert len(ROLE_PROMPTS) == 6
           assert len(MODES) > 0

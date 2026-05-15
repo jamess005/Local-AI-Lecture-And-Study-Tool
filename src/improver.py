@@ -287,7 +287,8 @@ class Improver:
         return verified[0]
 
     def _strip_function_defs_from_laws(self, block: str) -> str:
-        import re, pathlib
+        import re
+        import pathlib
         log = pathlib.Path("/tmp/strip_debug.log")
         with log.open('a') as f:
             f.write(f"=== INPUT ===\n{repr(block)}\n\n")
