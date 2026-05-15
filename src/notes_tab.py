@@ -1,6 +1,7 @@
 import re
 import threading
 import tkinter as tk
+from tkinter import messagebox
 from pathlib import Path
 
 import customtkinter as ctk
@@ -73,7 +74,7 @@ class _SearchableCombo(ctk.CTkFrame):
     def set(self, v: str):
         self._var.set(v)
 
-    def configure(self, **kwargs):
+    def configure(self, require_redraw=False, **kwargs):
         if "values" in kwargs:
             self._all = kwargs.pop("values")
         if kwargs:
@@ -105,6 +106,24 @@ class _SearchableCombo(ctk.CTkFrame):
         sb.pack(side="right", fill="y")
         for v in opts:
             lb.insert("end", v)
+
+        # Clamp after content is packed so winfo_width/height() reflect real popup size.
+        # Use the toplevel window's bounds (not winfo_screenwidth/height) so clamping
+        # works correctly on a secondary monitor.
+        top.update_idletasks()
+        pw = top.winfo_width()
+        ph = top.winfo_height()
+        root = self.winfo_toplevel()
+        win_x      = root.winfo_rootx()
+        win_y      = root.winfo_rooty()
+        win_right  = win_x + root.winfo_width()
+        win_bottom = win_y + root.winfo_height()
+        if x + pw > win_right:
+            x = max(win_x, win_right - pw)
+        if y + ph > win_bottom:
+            y = max(win_y, self._entry.winfo_rooty() - ph)
+        top.wm_geometry(f"+{x}+{y}")
+
         lb.bind("<ButtonRelease-1>", lambda e: self._pick(lb))
         lb.bind("<Return>",          lambda e: self._pick(lb))
         lb.bind("<Escape>",          lambda e: self._close())
@@ -195,10 +214,28 @@ class NotesTab:
         except AttributeError:
             pass
 
+    def _on_scroll_resize(self, event=None):
+        n = len(self._blocks)
+        if n == 0:
+            return
+        h = self._notes_scroll._parent_canvas.winfo_height()
+        if h <= 1:
+            self._frame.after(100, self._on_scroll_resize)
+            return
+        frac = min(n, 4)
+        box_height = max(80, h // frac - 100)
+        for b in self._blocks:
+            try:
+                b["textbox"].configure(height=box_height)
+            except Exception:
+                pass
+
     def _bind_scroll(self, widget):
+        if isinstance(widget, ctk.CTkTextbox):
+            return  # keep native Text-class scroll; don't bind outer scroll on border
         widget.bind("<Button-4>", lambda _e: self._scroll(-1))
         widget.bind("<Button-5>", lambda _e: self._scroll(1))
-        for attr in ("_textbox", "_canvas", "_entry"):
+        for attr in ("_canvas", "_entry"):
             inner = getattr(widget, attr, None)
             if inner is not None:
                 try:
@@ -454,10 +491,16 @@ class NotesTab:
             block.update_idletasks()
             self._bind_scroll(block)
 
+        if not getattr(self, '_scroll_resize_bound', False):
+            self._notes_scroll._parent_canvas.bind("<Configure>", self._on_scroll_resize, add="+")
+            self._scroll_resize_bound = True
+
         if not self._notes_shown:
             self._notes_header.pack(fill="x", pady=(8, 2))
             self._notes_scroll.pack(fill="both", expand=True)
             self._notes_shown = True
+
+        self._frame.after(100, self._on_scroll_resize)
 
         self._set_idle()
         self._state = IDLE
@@ -531,10 +574,7 @@ class NotesTab:
         merge_menu.set(_STANDALONE)
         merge_menu.pack(side="left", padx=(0, 8))
 
-        # ── Note textbox — sized to content so all text is visible without internal scroll ──
-        line_count = max(len(content.splitlines()), 1)
-        box_height = min(max(line_count * 22, 80), 600)
-        box = ctk.CTkTextbox(block, height=box_height, font=("Helvetica", 13), wrap="word")
+        box = ctk.CTkTextbox(block, height=200, font=("Helvetica", 13), wrap="word")
         box.insert("1.0", content)
         box.pack(fill="x", padx=8, pady=(4, 4))
 
@@ -556,7 +596,11 @@ class NotesTab:
         def insert_link():
             val = link_combo.get()
             if val and val != _NO_LINK:
-                box.insert("insert", f"[[{val}]]")
+                wikilink = f"[[{val}]]\n\n"
+                current = box.get("1.0", "end").rstrip("\n")
+                if not current.startswith(f"[[{val}]]"):
+                    box.delete("1.0", "end")
+                    box.insert("1.0", wikilink + current)
 
         ctk.CTkButton(
             row3, text="Insert", width=70, height=28,
@@ -596,6 +640,7 @@ class NotesTab:
             "label_var": label_var,
             "textbox": box,
             "main_btn": main_btn,
+            "link_combo": link_combo,
         })
         self._blocks.append(block_dict)
         return block
@@ -641,6 +686,10 @@ class NotesTab:
             if b["merge_var"].get() not in options:
                 b["merge_var"].set(_STANDALONE)
                 b["merge_menu"].set(_STANDALONE)
+        all_link_options = [_NO_LINK] + sorted(set(generated_names) | set(existing))
+        for b in self._blocks:
+            if "link_combo" in b:
+                b["link_combo"].configure(values=all_link_options)
         self._link_entry.configure(values=sorted(set(generated_names) | set(existing)))
 
     def _on_save(self):
@@ -761,7 +810,7 @@ class NotesTab:
 
     def _on_delete_block(self, block_frame: ctk.CTkFrame, block_dict: dict):
         topic = block_dict["topic_entry"].get().strip() or "this block"
-        if not tk.messagebox.askyesno("Delete block", f"Delete '{topic}'?", parent=self._frame):
+        if not messagebox.askyesno("Delete block", f"Delete '{topic}'?", parent=self._frame):
             return
         if self._main_topic == topic:
             self._main_topic = None

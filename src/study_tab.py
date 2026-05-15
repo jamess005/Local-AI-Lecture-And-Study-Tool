@@ -302,6 +302,7 @@ class StudyTab:
         self._generate_question()
 
     def _generate_question(self):
+        assert self._current is not None
         self._state = GENERATING
         self._status.configure(text="Generating question...")
         self._record_btn.configure(state="disabled")
@@ -320,6 +321,7 @@ class StudyTab:
         self._frame.after(0, lambda: self._on_question_ready(question))
 
     def _on_question_ready(self, question: str):
+        assert self._current is not None
         subject, topic, _ = self._current
         self._current_question = question
         self._question_label.configure(text=question)
@@ -381,6 +383,7 @@ class StudyTab:
         self._record_btn.configure(state="disabled")
         self._submit_btn.configure(state="disabled")
         self._status.configure(text="Evaluating...")
+        assert self._current is not None
         _, _, content = self._current
         threading.Thread(
             target=self._do_evaluate, args=(answer, content), daemon=True
@@ -391,6 +394,7 @@ class StudyTab:
         self._frame.after(0, lambda: self._on_result(result))
 
     def _on_result(self, result: str):
+        assert self._current is not None
         subject, topic, _ = self._current
         key = score_key(subject, topic)
 
@@ -449,6 +453,7 @@ class StudyTab:
         self._generate_question()
 
     def _on_exclude(self):
+        assert self._current is not None
         subject, topic, _ = self._current
         self._excluded.add(score_key(subject, topic))
         threading.Thread(

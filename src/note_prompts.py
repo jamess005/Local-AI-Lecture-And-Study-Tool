@@ -61,7 +61,6 @@ the lecturer names, write one bullet in a single TOPIC block.
 
 === OUTPUT FORMAT ===
 TOPIC: <subject — the lecturer's own words>
-<One sentence: what this lecture is about.>
 - <name>: <what the transcript says it is, does, or how it differs — 1–2 sentences>
 - <name>: <definition>
 
