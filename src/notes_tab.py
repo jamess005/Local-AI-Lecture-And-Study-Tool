@@ -1,5 +1,6 @@
 import re
 import threading
+import tkinter as tk
 from pathlib import Path
 
 import customtkinter as ctk
@@ -39,6 +40,118 @@ RECORDING = "recording"
 GENERATING = "generating"
 
 
+class _SearchableCombo(ctk.CTkFrame):
+    """Entry + Toplevel popup replacement for CTkComboBox(state='readonly').
+
+    Supports real-time filtering by typing, scrollable list, keyboard navigation.
+    Exposes .get() / .set() so call sites need no changes.
+    """
+
+    def __init__(self, parent, values, variable=None, command=None,
+                 width=180, font=("Helvetica", 11), placeholder_text="", **kw):
+        super().__init__(parent, fg_color="transparent", **kw)
+        self._all = values
+        self._var = variable or ctk.StringVar()
+        self._cmd = command
+        self._popup: tk.Toplevel | None = None
+        self._lb: tk.Listbox | None = None
+
+        self._entry = ctk.CTkEntry(self, width=width, font=font, textvariable=self._var,
+                                   placeholder_text=placeholder_text)
+        self._entry.pack()
+        self._entry.bind("<KeyRelease>", self._on_key)
+        self._entry.bind("<Button-1>",  self._show_popup)
+        self._entry.bind("<FocusOut>",  self._on_focus_out)
+        self._entry.bind("<Return>",    self._on_enter)
+        self._entry.bind("<Escape>",    lambda e: self._close())
+        self._entry.bind("<Down>",      self._focus_list)
+        self.bind("<Unmap>", lambda e: self._close())
+
+    def get(self) -> str:
+        return self._var.get()
+
+    def set(self, v: str):
+        self._var.set(v)
+
+    def configure(self, **kwargs):
+        if "values" in kwargs:
+            self._all = kwargs.pop("values")
+        if kwargs:
+            super().configure(**kwargs)
+
+    def _filtered(self) -> list[str]:
+        q = self._var.get().lower()
+        if not q or q in (_NO_LINK.lower(), _STANDALONE.lower()):
+            return self._all
+        return [v for v in self._all if q in v.lower()]
+
+    def _show_popup(self, _=None):
+        self._close()
+        opts = self._filtered()
+        if not opts:
+            return
+        top = tk.Toplevel(self)
+        top.wm_overrideredirect(True)
+        top.wm_attributes("-topmost", True)
+        x = self._entry.winfo_rootx()
+        y = self._entry.winfo_rooty() + self._entry.winfo_height()
+        top.wm_geometry(f"+{x}+{y}")
+
+        lb = tk.Listbox(top, height=min(8, len(opts)), font=("Helvetica", 11),
+                        selectmode="single", activestyle="dotbox")
+        sb = tk.Scrollbar(top, orient="vertical", command=lb.yview)
+        lb.configure(yscrollcommand=sb.set)
+        lb.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        for v in opts:
+            lb.insert("end", v)
+        lb.bind("<ButtonRelease-1>", lambda e: self._pick(lb))
+        lb.bind("<Return>",          lambda e: self._pick(lb))
+        lb.bind("<Escape>",          lambda e: self._close())
+        lb.bind("<FocusOut>",        self._on_focus_out)
+
+        self._popup, self._lb = top, lb
+
+    def _on_focus_out(self, _=None):
+        self.after(150, self._maybe_close)
+
+    def _maybe_close(self):
+        if not self._popup:
+            return
+        try:
+            fw = self.winfo_toplevel().focus_get()
+        except Exception:
+            fw = None
+        if fw is not self._lb:
+            self._close()
+
+    def _close(self):
+        if self._popup:
+            self._popup.destroy()
+            self._popup = None
+            self._lb = None
+
+    def _on_key(self, _=None):
+        self._show_popup()
+
+    def _focus_list(self, _=None):
+        if self._lb:
+            self._lb.focus_set()
+            self._lb.selection_set(0)
+
+    def _on_enter(self, _=None):
+        if self._lb and (sel := self._lb.curselection()):
+            self._pick(self._lb)
+
+    def _pick(self, lb: tk.Listbox):
+        sel = lb.curselection()
+        if sel:
+            self._var.set(lb.get(sel))
+        self._close()
+        if self._cmd:
+            self._cmd(self._var.get())
+
+
 class NotesTab:
     def __init__(self, parent: ctk.CTkFrame, recorder, transcriber, improver):
         self._recorder = recorder
@@ -48,6 +161,8 @@ class NotesTab:
         self._blocks: list[dict] = []
         self._notes_shown = False
         self._main_topic: str | None = None
+        self._cancel_generation = False
+        self._note_mode = ctk.StringVar(value="Multi")
 
         self._build_ui(parent)
 
@@ -59,7 +174,9 @@ class NotesTab:
             return [_NEW_SUBJECT]
         dirs = sorted(
             d.name for d in base.iterdir()
-            if d.is_dir() and not d.name.startswith(".")
+            if d.is_dir()
+            and not d.name.startswith(".")
+            and ((d / ".obsidian").exists() or any(d.glob("*.md")))
         )
         return dirs + [_NEW_SUBJECT]
 
@@ -125,6 +242,12 @@ class NotesTab:
         if subjects[0] == _NEW_SUBJECT:
             self._new_subject_entry.grid(row=0, column=2, sticky="w")
 
+        self._mode_btn = ctk.CTkSegmentedButton(
+            setup, values=["Multi", "Single"],
+            variable=self._note_mode, width=120,
+        )
+        self._mode_btn.grid(row=0, column=3, padx=(12, 0))
+
         # Transcription input
         ctk.CTkLabel(
             self._frame, text="Lecture transcription", font=("Helvetica", 11),
@@ -165,7 +288,7 @@ class NotesTab:
         ctk.CTkButton(
             self._btn_row, text="Copy", width=80, height=40,
             fg_color="#555", command=self._on_copy_transcript,
-        ).pack(side="left")
+        ).pack(side="left", padx=(0, 6))
 
         # Generated notes area — hidden until first generation
         self._notes_header = ctk.CTkFrame(self._frame, fg_color="transparent")
@@ -191,9 +314,10 @@ class NotesTab:
         )
         self._link_all_btn.pack(side="right", padx=(0, 4))
 
-        self._link_entry = ctk.CTkEntry(
-            self._notes_header, placeholder_text="Link topic…",
+        self._link_entry = _SearchableCombo(
+            self._notes_header, values=[],
             width=160, font=("Helvetica", 12),
+            placeholder_text="Link topic…",
         )
         self._link_entry.pack(side="right", padx=(0, 4))
 
@@ -210,20 +334,27 @@ class NotesTab:
             self._new_subject_entry.grid(row=0, column=2, sticky="w", padx=(0, 6))
         else:
             self._new_subject_entry.grid_forget()
+        if self._blocks:
+            self._refresh_merge_menus(value)
 
     # ── Button state helpers ──────────────────────────────────────────────────
 
     def _set_busy(self):
         self._record_btn.configure(state="disabled")
-        self._generate_btn.configure(state="disabled")
+        self._generate_btn.configure(text="Cancel", command=self._on_cancel, state="normal")
         if self._blocks:
             self._save_btn.configure(state="disabled")
 
     def _set_idle(self):
         self._record_btn.configure(state="normal")
-        self._generate_btn.configure(state="normal")
+        self._generate_btn.configure(text="Generate notes →", command=self._on_generate, state="normal")
         if self._blocks:
             self._save_btn.configure(state="normal")
+
+    def _on_cancel(self):
+        self._cancel_generation = True
+        self._generate_btn.configure(state="disabled")
+        self._status.configure(text="Cancelling…")
 
     # ── Recording ─────────────────────────────────────────────────────────────
 
@@ -272,21 +403,34 @@ class NotesTab:
         self._state = GENERATING
         self._set_busy()
         self._status.configure(text="Generating notes...")
-        threading.Thread(target=self._do_generate, args=(transcription,), daemon=True).start()
+        mode = self._note_mode.get().lower()
+        threading.Thread(target=self._do_generate, args=(transcription, mode), daemon=True).start()
 
-    def _do_generate(self, transcription: str):
+    def _do_generate(self, transcription: str, mode: str = "multi"):
         try:
             if self._improver._model is None:
                 self._frame.after(0, lambda: self._status.configure(text="Loading model..."))
                 self._improver.load()
-            notes = self._improver.generate_notes(transcription)
+            notes = self._improver.generate_notes(transcription, mode=mode)
+            if self._cancel_generation:
+                self._cancel_generation = False
+                self._frame.after(0, self._set_idle)
+                self._frame.after(0, lambda: self._status.configure(text="Cancelled."))
+                self._frame.after(2000, lambda: self._status.configure(text="Ready."))
+                return
             self._frame.after(0, lambda: self._on_notes_ready(notes))
         except Exception as exc:
+            self._cancel_generation = False
             msg = str(exc)
             self._frame.after(0, lambda: self._on_generate_error(msg))
 
     def _on_notes_ready(self, raw: str):
         sections = self._parse_topics(raw)
+        if not raw.strip() or all(not content.strip() for _, content in sections):
+            self._set_idle()
+            self._state = IDLE
+            self._status.configure(text="Model returned no content — try regenerating.")
+            return
         # Strip LaTeX delimiters the model adds (\( ... \), $...$)
         sections = [(name, _normalize_math_delims(content)) for name, content in sections]
 
@@ -300,7 +444,8 @@ class NotesTab:
             w.destroy()
         self._blocks = []
         self._main_topic = None
-        self._link_entry.delete(0, "end")
+        self._link_entry.set("")
+        self._link_entry.configure(values=all_names)
 
         for topic_name, content in sections:
             other_generated = [n for n in generated_names if n != topic_name]
@@ -324,7 +469,13 @@ class NotesTab:
     def _on_generate_error(self, message: str):
         self._set_idle()
         self._state = IDLE
-        self._status.configure(text=f"Error: {message}", text_color="red")
+        msg_lower = message.lower()
+        if "out of memory" in msg_lower or "cuda" in msg_lower or "oom" in msg_lower:
+            friendly = "GPU out of memory — try a shorter transcript or restart the app."
+        else:
+            friendly = message[:80] + ("…" if len(message) > 80 else "")
+        self._status.configure(text=f"Error: {friendly}", text_color="red")
+        self._frame.after(5000, lambda: self._status.configure(text="Ready.", text_color="gray"))
 
     def _build_block(
         self,
@@ -342,16 +493,14 @@ class NotesTab:
         row1 = ctk.CTkFrame(block, fg_color="transparent")
         row1.pack(fill="x", padx=8, pady=(8, 2))
 
-        ctk.CTkLabel(
-            row1, text="Topic:", font=("Helvetica", 11), text_color="gray"
-        ).pack(side="left", padx=(0, 4))
+        topic_label = ctk.CTkLabel(row1, text="Topic:", font=("Helvetica", 11), text_color="gray")
+        topic_label.pack(side="left", padx=(0, 4))
         entry = ctk.CTkEntry(row1, width=190, font=("Helvetica", 12))
         entry.insert(0, topic_name)
         entry.pack(side="left", padx=(0, 14))
 
-        ctk.CTkLabel(
-            row1, text="Include in:", font=("Helvetica", 11), text_color="gray"
-        ).pack(side="left", padx=(0, 4))
+        inc_label = ctk.CTkLabel(row1, text="Include in:", font=("Helvetica", 11), text_color="gray")
+        inc_label.pack(side="left", padx=(0, 4))
         merge_var = ctk.StringVar(value=_STANDALONE)
 
         # "as:" controls created before the merge menu so the closure can reference them
@@ -367,14 +516,17 @@ class NotesTab:
             if value == _STANDALONE:
                 as_label.pack_forget()
                 as_menu.pack_forget()
+                topic_label.pack(side="left", padx=(0, 4), before=inc_label)
+                entry.pack(side="left", padx=(0, 14), before=inc_label)
             else:
+                topic_label.pack_forget()
+                entry.pack_forget()
                 as_label.pack(side="left", padx=(0, 4))
                 as_menu.pack(side="left")
 
-        merge_menu = ctk.CTkComboBox(
+        merge_menu = _SearchableCombo(
             row1, values=merge_options, variable=merge_var,
-            width=180, font=("Helvetica", 11),
-            state="readonly", command=on_merge_change,
+            width=180, font=("Helvetica", 11), command=on_merge_change,
         )
         merge_menu.set(_STANDALONE)
         merge_menu.pack(side="left", padx=(0, 8))
@@ -394,9 +546,9 @@ class NotesTab:
             row3, text="Insert link:", font=("Helvetica", 11), text_color="gray"
         ).pack(side="left", padx=(0, 4))
 
-        link_combo = ctk.CTkComboBox(
+        link_combo = _SearchableCombo(
             row3, values=link_options, width=220,
-            font=("Helvetica", 11), state="readonly",
+            font=("Helvetica", 11),
         )
         link_combo.set(_NO_LINK)
         link_combo.pack(side="left", padx=(0, 6))
@@ -439,6 +591,8 @@ class NotesTab:
             "topic_entry": entry,
             "merge_var": merge_var,
             "merge_menu": merge_menu,
+            "as_label": as_label,
+            "as_menu": as_menu,
             "label_var": label_var,
             "textbox": box,
             "main_btn": main_btn,
@@ -487,6 +641,7 @@ class NotesTab:
             if b["merge_var"].get() not in options:
                 b["merge_var"].set(_STANDALONE)
                 b["merge_menu"].set(_STANDALONE)
+        self._link_entry.configure(values=sorted(set(generated_names) | set(existing)))
 
     def _on_save(self):
         if self._subject_var.get() == _NEW_SUBJECT:
@@ -515,6 +670,9 @@ class NotesTab:
                 content = bd["content"]
                 if self._main_topic and bd["topic"] != self._main_topic:
                     content = f"[[{self._main_topic}]]\n\n{content}"
+                subject_link = f"[[{subject}]]"
+                if subject_link not in content:
+                    content = f"{subject_link}\n\n{content}"
                 final[bd["topic"]] = content
 
         # Merged notes are appended as sub-sections
@@ -531,6 +689,9 @@ class NotesTab:
                 continue
             path = Path(DEFAULT_NOTES_DIR) / subject / f"{topic}.md"
             path.parent.mkdir(parents=True, exist_ok=True)
+            index_path = Path(DEFAULT_NOTES_DIR) / f"{subject}.md"
+            if not index_path.exists():
+                index_path.write_text(f"# {subject}\n", encoding="utf-8")
             path.write_text(content, encoding="utf-8")
             saved.append(topic)
 
@@ -588,6 +749,8 @@ class NotesTab:
             return
         wikilink = f"[[{topic}]]\n\n"
         for b in self._blocks:
+            if b["merge_var"].get() != _STANDALONE:
+                continue
             box = b["textbox"]
             current = box.get("1.0", "end").rstrip("\n")
             if not current.startswith(f"[[{topic}]]"):
@@ -597,7 +760,9 @@ class NotesTab:
         self._frame.after(1500, lambda: self._link_all_btn.configure(text="Link all"))
 
     def _on_delete_block(self, block_frame: ctk.CTkFrame, block_dict: dict):
-        topic = block_dict["topic_entry"].get().strip()
+        topic = block_dict["topic_entry"].get().strip() or "this block"
+        if not tk.messagebox.askyesno("Delete block", f"Delete '{topic}'?", parent=self._frame):
+            return
         if self._main_topic == topic:
             self._main_topic = None
         if block_dict in self._blocks:

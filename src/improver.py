@@ -84,14 +84,31 @@ class Improver:
         self._tokenizer: Any = None
 
     def load(self):
+        import json
+        from pathlib import Path
         model_path = os.environ["MODEL_PATH"]
-        self._tokenizer = AutoTokenizer.from_pretrained(model_path)
-        bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
-        self._model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            quantization_config=bnb_config,
-            device_map={"": "cuda:0"},
-        )
+        self._tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+        cfg = json.loads((Path(model_path) / "config.json").read_text())
+        quant_method = cfg.get("quantization_config", {}).get("quant_method", "")
+        if quant_method == "awq":
+            # AWQ pre-quantized model — no bitsandbytes kernels, safe on ROCm
+            from awq import AutoAWQForCausalLM
+            self._model = AutoAWQForCausalLM.from_quantized(
+                model_path,
+                fuse_layers=False,
+            )
+        else:
+            # Standard model — quantize at load time with bitsandbytes
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16
+            )
+            self._model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                quantization_config=bnb_config,
+                device_map="auto",
+                max_memory={0: "15GiB", "cpu": "20GiB"},
+                low_cpu_mem_usage=True,
+            )
         self._model.eval()
 
     def unload(self):
@@ -120,53 +137,85 @@ class Improver:
         ]
         return self._generate(messages, max_new_tokens=128)
 
-    def generate_notes(self, transcription: str) -> str:
+    def generate_notes(self, transcription: str, mode: str = "multi") -> str:
         if self._model is None:
             self.load()
         try:
-            topic = self._identify_lecture_topic(transcription)
-            context = f"[Lecture: {topic}]\n\n" if topic else ""
-            chunks = self._chunk_transcript(transcription, max_words=200, split_words=100)
+            if mode == "single":
+                from note_prompts import SINGLE_NOTE_PROMPT
+                raw = self._generate([
+                    {"role": "system", "content": SINGLE_NOTE_PROMPT},
+                    {"role": "user", "content": transcription},
+                ], max_new_tokens=1024).strip()
+                if not raw:
+                    return ""
+                result = self._postprocess_notes(raw)
+                return result if result.strip() else raw
 
-            notes = ""
-            for chunk in chunks:
-                notes = self._accumulate(notes, context + chunk)
-
-            exercise_blocks = self._extract_exercise_blocks(transcription)
-            if exercise_blocks:
-                existing = self._split_topic_blocks(notes)
-                combined = self._deduplicate_chunks(existing + exercise_blocks)
-                notes = "\n\n".join(combined)
-
-            if not notes:
+            from note_prompts import SINGLE_PASS_PROMPT
+            raw = self._generate([
+                {"role": "system", "content": SINGLE_PASS_PROMPT},
+                {"role": "user", "content": transcription},
+            ], max_new_tokens=2048).strip()
+            if not raw:
                 return ""
-
-            blocks = self._split_topic_blocks(notes)
+            blocks = self._split_topic_blocks(raw)
+            if not blocks:
+                return ""
+            blocks = [self._verify_block_laws(b) for b in blocks]
+            blocks = [self._strip_function_defs_from_laws(b) for b in blocks]
+            exercise_blocks = self._extract_exercise_blocks(transcription)
+            for ex_block in exercise_blocks:
+                ex_topic = self._extract_topic(ex_block)
+                idx = self._find_concept_block_for_exercise(ex_topic, blocks)
+                if idx is not None and "Example:" not in blocks[idx]:
+                    examples = self._extract_example_section(ex_block)
+                    if examples:
+                        blocks[idx] = blocks[idx].rstrip() + "\nExample:\n" + examples
             blocks.sort(key=lambda b: (1 if "Example:" in b else 0))
-            notes = "\n\n".join(blocks)
-            notes = self._verify_examples(notes)
-            return self._postprocess_notes(notes)
+            return self._postprocess_notes("\n\n".join(blocks))
         finally:
             self.unload()
 
     def _accumulate(self, current_notes: str, new_chunk: str) -> str:
-        from note_prompts import ACCUMULATE_PROMPT
-        user_content = (
-            f"CURRENT NOTES:\n{current_notes}\n\nNEW CHUNK:\n{new_chunk}"
-            if current_notes else
-            f"CURRENT NOTES: (none)\n\nNEW CHUNK:\n{new_chunk}"
-        )
-        result = self._generate([
-            {"role": "system", "content": ACCUMULATE_PROMPT},
-            {"role": "user", "content": user_content},
-        ], max_new_tokens=512).strip()
-        if not result:
+        existing = self._split_topic_blocks(current_notes) if current_notes else []
+        known_topics = {self._extract_topic(b) for b in existing}
+
+        concepts = self._extract_concepts(new_chunk, known_topics)
+        if not concepts:
             return current_notes
-        new_blocks = self._split_topic_blocks(result)
+
+        new_blocks: list[str] = []
+        for concept in concepts:
+            block = self._generate_topic_block(concept, new_chunk)
+            if block and not self._is_skip(block):
+                parsed = self._split_topic_blocks(block)
+                new_blocks.extend(parsed)
+
         if not new_blocks:
             return current_notes
-        existing = self._split_topic_blocks(current_notes) if current_notes else []
+
         return "\n\n".join(self._deduplicate_chunks(existing + new_blocks))
+
+    def _extract_concepts(self, chunk: str, known_topics: set[str]) -> list[str]:
+        from note_prompts import EXTRACT_CONCEPTS_PROMPT
+        known_str = ", ".join(sorted(known_topics)) if known_topics else "none"
+        user_content = f"KNOWN: {known_str}\nCHUNK: {chunk}"
+        result = self._generate([
+            {"role": "system", "content": EXTRACT_CONCEPTS_PROMPT},
+            {"role": "user", "content": user_content},
+        ], max_new_tokens=64).strip()
+        if not result:
+            return []
+        return [c.strip() for c in result.split(",") if c.strip()]
+
+    def _generate_topic_block(self, concept: str, chunk: str) -> str:
+        from note_prompts import GENERATE_TOPIC_PROMPT
+        user_content = f"CONCEPT: {concept}\nCHUNK: {chunk}"
+        return self._generate([
+            {"role": "system", "content": GENERATE_TOPIC_PROMPT},
+            {"role": "user", "content": user_content},
+        ], max_new_tokens=768).strip()
 
     def _extract_exercise_blocks(self, transcript: str) -> list[str]:
         """One focused model call per exercise, detected by 'pause the video' markers."""
@@ -217,10 +266,102 @@ class Improver:
         if not result:
             return notes
         verified_blocks = self._split_topic_blocks(result)
-        # If truncation dropped blocks, fall back to unverified notes
-        if len(verified_blocks) < len(original_blocks):
+        # Fall back if VERIFY changed the block count (truncation or hallucinated additions)
+        if len(verified_blocks) != len(original_blocks):
             return notes
         return "\n\n".join(verified_blocks)
+
+    def _verify_block_laws(self, block: str) -> str:
+        if "Laws:" not in block:
+            return block
+        from note_prompts import VERIFY_EXAMPLES_PROMPT
+        result = self._generate([
+            {"role": "system", "content": VERIFY_EXAMPLES_PROMPT},
+            {"role": "user", "content": block},
+        ], max_new_tokens=512).strip()
+        if not result:
+            return block
+        verified = self._split_topic_blocks(result)
+        if len(verified) != 1:
+            return block
+        return verified[0]
+
+    def _strip_function_defs_from_laws(self, block: str) -> str:
+        import re, pathlib
+        log = pathlib.Path("/tmp/strip_debug.log")
+        with log.open('a') as f:
+            f.write(f"=== INPUT ===\n{repr(block)}\n\n")
+
+        lines = block.splitlines(keepends=True)
+        result = []
+        in_laws = False
+        laws_idx: int | None = None
+
+        for line in lines:
+            s = line.strip()
+            if re.match(r'(?i)^laws\s*:', s):
+                in_laws = True
+                laws_idx = len(result)
+                result.append(line)
+            elif re.match(r'(?i)^(example|topic)\s*:', s):
+                in_laws = False
+                result.append(line)
+            elif in_laws and re.match(r'^-\s*\$?[a-zA-Z]\(x\)\$?\s*=', s):
+                pass  # drop function-definition bullet from Laws only
+            else:
+                result.append(line)
+
+        # Remove Laws: header if no bullet survived before the next section
+        if laws_idx is not None:
+            has_bullet = False
+            for i in range(laws_idx + 1, len(result)):
+                s = result[i].strip()
+                if not s:
+                    continue
+                if re.match(r'(?i)^(example|topic|laws)\s*:', s):
+                    break
+                if s.startswith('-'):
+                    has_bullet = True
+                    break
+            if not has_bullet:
+                result.pop(laws_idx)
+
+        output = ''.join(result).strip()
+        with log.open('a') as f:
+            f.write(f"=== OUTPUT ===\n{repr(output)}\n\n")
+        return output
+
+    def _extract_example_section(self, block: str) -> str:
+        lines = block.splitlines()
+        in_example = False
+        bullets: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("Example:"):
+                in_example = True
+                continue
+            if in_example:
+                if stripped.startswith("- "):
+                    bullets.append(line)
+                elif stripped:
+                    break
+        return "\n".join(bullets)
+
+    def _find_concept_block_for_exercise(self, exercise_topic: str, blocks: list[str]) -> int | None:
+        import re
+        m = re.match(r'^([a-zA-Z])\s*\(', exercise_topic)
+        if not m:
+            return None
+        letter = m.group(1).lower()
+        for i, block in enumerate(blocks):
+            topic = self._extract_topic(block).lower()
+            if letter == 'f' and 'absolute' in topic:
+                return i
+            # Match the function letter as a standalone word (e.g. "Function g" → 'g')
+            # \b ensures we don't match 'f' inside the word "function" itself
+            if re.search(r'\b' + letter + r'\b', topic) and 'function' in topic:
+                return i
+        return None
 
     def _infer_exercise_topic(self, segment: str) -> str:
         import re
@@ -355,6 +496,8 @@ class Improver:
             "note:", "note that", "**correction", "revised ",
             "to fix:", "to maintain", "given the", "actually,",
         )
+        import re
+        text = re.sub(r'(?m)^(Laws|Example):\s*\n- None\s*\n?', '', text)
         lines = text.splitlines()
         cleaned = []
         for line in lines:
@@ -389,14 +532,20 @@ class Improver:
         ]
         return self._generate(messages, max_new_tokens=256)
 
-    def _generate(self, messages: list[dict], max_new_tokens: int = 512) -> str:
+    def _generate(self, messages: list[dict], max_new_tokens: int = 512,
+                  enable_thinking: bool = False) -> str:
         if self._model is None or self._tokenizer is None:
             raise RuntimeError("Model not loaded")
         model, tokenizer = self._model, self._tokenizer
-        text = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
-            enable_thinking=False,
-        )
+        try:
+            text = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+                enable_thinking=enable_thinking,
+            )
+        except TypeError:
+            text = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            )
         inputs = tokenizer([text], return_tensors="pt").to("cuda")
         with torch.no_grad():
             output_ids = model.generate(  # type: ignore[attr-defined]
@@ -405,4 +554,11 @@ class Improver:
                 do_sample=False,
             )
         generated = output_ids[0][inputs["input_ids"].shape[1]:]
-        return tokenizer.decode(generated, skip_special_tokens=True).strip()
+        if enable_thinking:
+            import re
+            raw = tokenizer.decode(generated, skip_special_tokens=False)
+            output = raw.split('</think>', 1)[1] if '</think>' in raw else raw
+            output = re.sub(r'<\|[^|]+\|>', '', output)
+        else:
+            output = tokenizer.decode(generated, skip_special_tokens=True)
+        return output.strip()
