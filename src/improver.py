@@ -150,7 +150,26 @@ class Improver:
                 if not raw:
                     return ""
                 result = self._postprocess_notes(raw)
-                return result if result.strip() else raw
+                text = result if result.strip() else raw
+                blocks = self._split_topic_blocks(text)
+                if len(blocks) > 1:
+                    header = self._extract_topic(blocks[0])
+                    seen: set[str] = set()
+                    bullets: list[str] = []
+                    for b in blocks:
+                        for line in b.splitlines():
+                            s = line.strip()
+                            if not s.startswith("- "):
+                                continue
+                            colon = s.find(":", 2)
+                            name = s[2:colon].strip() if colon > 2 else ""
+                            if name and name in seen:
+                                continue
+                            if name:
+                                seen.add(name)
+                            bullets.append(line)
+                    text = "TOPIC: " + header + "\n" + "\n".join(bullets)
+                return text
 
             from note_prompts import SINGLE_PASS_PROMPT
             raw = self._generate([

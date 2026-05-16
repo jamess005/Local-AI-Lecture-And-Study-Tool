@@ -181,7 +181,7 @@ class NotesTab:
         self._notes_shown = False
         self._main_topic: str | None = None
         self._cancel_generation = False
-        self._note_mode = ctk.StringVar(value="Multi")
+        self._mode = "multi"
 
         self._build_ui(parent)
 
@@ -230,21 +230,17 @@ class NotesTab:
             except Exception:
                 pass
 
-    def _bind_scroll(self, widget):
-        if isinstance(widget, ctk.CTkTextbox):
-            return  # keep native Text-class scroll; don't bind outer scroll on border
-        widget.bind("<Button-4>", lambda _e: self._scroll(-1))
-        widget.bind("<Button-5>", lambda _e: self._scroll(1))
-        for attr in ("_canvas", "_entry"):
-            inner = getattr(widget, attr, None)
-            if inner is not None:
-                try:
-                    inner.bind("<Button-4>", lambda _e: self._scroll(-1))
-                    inner.bind("<Button-5>", lambda _e: self._scroll(1))
-                except Exception:
-                    pass
-        for child in widget.winfo_children():
-            self._bind_scroll(child)
+    def _scroll_if_within(self, delta: int, event):
+        try:
+            pf = self._notes_scroll._parent_frame
+            w = event.widget
+            while w is not None:
+                if w is pf:
+                    self._scroll(delta)
+                    return
+                w = getattr(w, 'master', None)
+        except Exception:
+            pass
 
     # ── UI construction ───────────────────────────────────────────────────────
 
@@ -281,8 +277,10 @@ class NotesTab:
 
         self._mode_btn = ctk.CTkSegmentedButton(
             setup, values=["Multi", "Single"],
-            variable=self._note_mode, width=120,
+            command=lambda val: setattr(self, '_mode', val.lower()),
+            width=120,
         )
+        self._mode_btn.set("Multi")
         self._mode_btn.grid(row=0, column=3, padx=(12, 0))
 
         # Transcription input
@@ -359,10 +357,9 @@ class NotesTab:
         self._link_entry.pack(side="right", padx=(0, 4))
 
         self._notes_scroll = ctk.CTkScrollableFrame(self._frame, fg_color="transparent")
-        self._notes_scroll.bind("<Button-4>", lambda _e: self._scroll(-1))
-        self._notes_scroll.bind("<Button-5>", lambda _e: self._scroll(1))
-        self._notes_scroll._parent_canvas.bind("<Button-4>", lambda _e: self._scroll(-1))
-        self._notes_scroll._parent_canvas.bind("<Button-5>", lambda _e: self._scroll(1))
+        # bind_all mirrors CTkScrollableFrame's own <MouseWheel> bind_all for Windows/macOS
+        self._notes_scroll.bind_all("<Button-4>", lambda e: self._scroll_if_within(-1, e), add="+")
+        self._notes_scroll.bind_all("<Button-5>", lambda e: self._scroll_if_within(1, e), add="+")
 
     # ── Subject selector ──────────────────────────────────────────────────────
 
@@ -440,7 +437,7 @@ class NotesTab:
         self._state = GENERATING
         self._set_busy()
         self._status.configure(text="Generating notes...")
-        mode = self._note_mode.get().lower()
+        mode = self._mode
         threading.Thread(target=self._do_generate, args=(transcription, mode), daemon=True).start()
 
     def _do_generate(self, transcription: str, mode: str = "multi"):
@@ -489,7 +486,6 @@ class NotesTab:
             merge_options = [_STANDALONE] + sorted(set(existing) | set(other_generated))
             block = self._build_block(topic_name, content, merge_options, link_options)
             block.update_idletasks()
-            self._bind_scroll(block)
 
         if not getattr(self, '_scroll_resize_bound', False):
             self._notes_scroll._parent_canvas.bind("<Configure>", self._on_scroll_resize, add="+")
@@ -577,6 +573,13 @@ class NotesTab:
         box = ctk.CTkTextbox(block, height=200, font=("Helvetica", 13), wrap="word")
         box.insert("1.0", content)
         box.pack(fill="x", padx=8, pady=(4, 4))
+        # Instance bindings returning "break" stop bind_all from also scrolling the outer frame
+        _tb = getattr(box, '_textbox', None)
+        if _tb is not None:
+            def _tb_up(_e, t=_tb): t.yview_scroll(-1, "units"); return "break"
+            def _tb_dn(_e, t=_tb): t.yview_scroll(1, "units"); return "break"
+            _tb.bind("<Button-4>", _tb_up, add="+")
+            _tb.bind("<Button-5>", _tb_dn, add="+")
 
         # ── Link row ─────────────────────────────────────────────────────────
         row3 = ctk.CTkFrame(block, fg_color="transparent")
