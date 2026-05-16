@@ -576,8 +576,12 @@ class NotesTab:
         # Instance bindings returning "break" stop bind_all from also scrolling the outer frame
         _tb = getattr(box, '_textbox', None)
         if _tb is not None:
-            def _tb_up(_e, t=_tb): t.yview_scroll(-1, "units"); return "break"
-            def _tb_dn(_e, t=_tb): t.yview_scroll(1, "units"); return "break"
+            def _tb_up(_e, t=_tb):
+                t.yview_scroll(-1, "units")
+                return "break"
+            def _tb_dn(_e, t=_tb):
+                t.yview_scroll(1, "units")
+                return "break"
             _tb.bind("<Button-4>", _tb_up, add="+")
             _tb.bind("<Button-5>", _tb_dn, add="+")
 
