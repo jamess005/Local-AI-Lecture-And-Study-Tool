@@ -152,7 +152,7 @@ class Improver:
                 result = self._postprocess_notes(raw)
                 text = result if result.strip() else raw
                 blocks = self._split_topic_blocks(text)
-                if len(blocks) > 1:
+                if blocks:
                     header = self._extract_topic(blocks[0])
                     seen: set[str] = set()
                     bullets: list[str] = []
