@@ -615,8 +615,10 @@ class NotesTab:
         ).pack(side="left", padx=(0, 6))
 
         def _do_copy():
+            topic = entry.get().strip()
+            content = box.get("1.0", "end").strip()
             self._frame.clipboard_clear()
-            self._frame.clipboard_append(box.get("1.0", "end").strip())
+            self._frame.clipboard_append(f"## {topic}\n\n{content}" if topic else content)
 
         ctk.CTkButton(
             row3, text="Copy", width=70, height=28,

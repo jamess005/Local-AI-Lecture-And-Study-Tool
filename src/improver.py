@@ -142,38 +142,51 @@ class Improver:
             self.load()
         try:
             if mode == "single":
-                from note_prompts import SINGLE_NOTE_PROMPT
+                from note_prompts import SINGLE_PROMPT
                 raw = self._generate([
-                    {"role": "system", "content": SINGLE_NOTE_PROMPT},
+                    {"role": "system", "content": SINGLE_PROMPT},
                     {"role": "user", "content": transcription},
-                ], max_new_tokens=1024).strip()
+                ], max_new_tokens=2048).strip()
                 if not raw:
                     return ""
                 result = self._postprocess_notes(raw)
                 text = result if result.strip() else raw
                 blocks = self._split_topic_blocks(text)
                 if blocks:
-                    header = self._extract_topic(blocks[0])
+                    header = self._extract_topic(blocks[0]).title()
                     seen: set[str] = set()
-                    bullets: list[str] = []
+                    paras: list[str] = []
                     for b in blocks:
+                        current: list[str] = []
                         for line in b.splitlines():
-                            s = line.strip()
-                            if not s.startswith("- "):
+                            if line.startswith("TOPIC:"):
                                 continue
-                            colon = s.find(":", 2)
-                            name = s[2:colon].strip() if colon > 2 else ""
-                            if name and name in seen:
-                                continue
-                            if name:
-                                seen.add(name)
-                            bullets.append(line)
-                    text = "TOPIC: " + header + "\n" + "\n".join(bullets)
+                            if line.strip():
+                                current.append(line)
+                            else:
+                                if current:
+                                    colon = current[0].find(":")
+                                    name = current[0][:colon].strip() if colon > 0 else ""
+                                    if name and name in seen:
+                                        current = []
+                                        continue
+                                    if name:
+                                        seen.add(name)
+                                    paras.append("\n".join(current))
+                                    current = []
+                        if current:
+                            colon = current[0].find(":")
+                            name = current[0][:colon].strip() if colon > 0 else ""
+                            if not (name and name in seen):
+                                if name:
+                                    seen.add(name)
+                                paras.append("\n".join(current))
+                    text = "TOPIC: " + header + "\n" + "\n\n".join(paras)
                 return text
 
-            from note_prompts import SINGLE_PASS_PROMPT
+            from note_prompts import MULTI_PROMPT
             raw = self._generate([
-                {"role": "system", "content": SINGLE_PASS_PROMPT},
+                {"role": "system", "content": MULTI_PROMPT},
                 {"role": "user", "content": transcription},
             ], max_new_tokens=2048).strip()
             if not raw:

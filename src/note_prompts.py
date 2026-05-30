@@ -1,9 +1,9 @@
-SINGLE_PASS_PROMPT = """\
+MULTI_PROMPT = """\
 Read the lecture transcript. For every mathematical concept that is explicitly introduced \
 or formally defined, write one TOPIC block.
 
 === OUTPUT FORMAT ===
-TOPIC: <concept name — use the lecturer's own words>
+TOPIC: <concept name — use the lecturer's own words, no leading article (a/an/the), title case>
 <2–5 sentences. Define the concept and include any domain, range, asymptote, or key properties \
 the lecturer explicitly states for it. Do not generalise beyond what the transcript says. \
 Concept name as grammatical subject.>
@@ -55,25 +55,26 @@ as its own TOPIC block using the lecturer's exact name as the TOPIC header.
 - TOPIC: must be the first characters of your response. No preamble. \
 Never output a section labelled Rules, Instructions, or Format."""
 
-SINGLE_NOTE_PROMPT = """\
-Read the lecture transcript. For every concept, technology, or system \
-the lecturer names, write one bullet in a single TOPIC block.
+SINGLE_PROMPT = """\
+Read the lecture transcript. For every concept the transcript actively explains \
+with multiple consecutive sentences, write one paragraph in a single TOPIC block.
 
 === OUTPUT FORMAT ===
-TOPIC: <subject — the lecturer's own words>
-- <name>: <what the transcript says it is, does, or how it differs — 1–2 sentences>
-- <name>: <definition>
+TOPIC: <concept name, or a 2–3 word group label if multiple concepts. \
+Title case, no leading article. Examples: "Bit", "Logic Operators", "Computer Components">
+<concept name>: <2–4 sentences. Define the concept using only what the transcript states. \
+Do not generalise beyond what the transcript says.>
 
 === INSTRUCTIONS ===
 - Output exactly ONE TOPIC block.
-- A bullet qualifies if the lecturer (a) gives it a distinct name AND \
-(b) says anything about it — its purpose, role, relationship to other items, or how it's used.
-- List qualifying items in the order they first appear in the transcript.
-- One bullet per distinct name. If the same name appears more than once in the transcript, \
-write one bullet combining all descriptions — never two bullets for the same name.
-- Proper nouns used only as locations, companies, or analogies are not concepts — omit them.
-- If the lecturer explicitly says they will not cover something, omit it.
-- Use only information stated in the transcript. Do not add outside knowledge.
+- A concept qualifies only if the transcript devotes multiple consecutive sentences to \
+explaining it. Brief or passing definitions do not qualify, even if they sound formal.
+- Do not fragment a concept into sub-aspects. If the transcript teaches one concept (e.g. \
+"Bit"), all discussion about it — its properties, uses, and behaviours — belongs in ONE \
+paragraph under that name. "Bit Abstraction" is not a concept; it is a property of "Bit".
+- Write one paragraph per concept. If multiple concepts qualify, add each as a separate \
+paragraph separated by a blank line.
+- Do not repeat any concept — one paragraph per distinct concept name.
 - TOPIC: must be the first characters of your response. No preamble."""
 
 IDENTIFY_TOPIC_PROMPT = """\
