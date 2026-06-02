@@ -9,6 +9,10 @@ import customtkinter as ctk
 from note_reader import DEFAULT_NOTES_DIR
 
 
+def _norm_topic(name: str) -> str:
+    return re.sub(r'\s+', ' ', name.strip().lower())
+
+
 def _normalize_math_delims(text: str) -> str:
     # 1. Convert \(...\) and \[...\] to $...$
     text = re.sub(r"\\\((.+?)\\\)", r"$\1$", text, flags=re.DOTALL)
@@ -474,9 +478,7 @@ class NotesTab:
         all_names = sorted(set(generated_names) | set(existing))
         link_options = [_NO_LINK] + all_names
 
-        _norm = lambda n: re.sub(r'\s+', ' ', n.strip().lower())
-        norm_names = [_norm(n) for n, _ in sections]
-        dup_set = {n for n in norm_names if norm_names.count(n) > 1}
+        self._existing_names = {_norm_topic(n) for n in existing}
 
         for w in self._notes_scroll.winfo_children():
             w.destroy()
@@ -488,9 +490,10 @@ class NotesTab:
         for topic_name, content in sections:
             other_generated = [n for n in generated_names if n != topic_name]
             merge_options = [_STANDALONE] + sorted(set(existing) | set(other_generated))
-            is_dup = _norm(topic_name) in dup_set
-            block = self._build_block(topic_name, content, merge_options, link_options, is_duplicate=is_dup)
+            block = self._build_block(topic_name, content, merge_options, link_options)
             block.update_idletasks()
+
+        self._refresh_duplicate_warnings()
 
         if not getattr(self, '_scroll_resize_bound', False):
             self._notes_scroll._parent_canvas.bind("<Configure>", self._on_scroll_resize, add="+")
@@ -527,7 +530,6 @@ class NotesTab:
         content: str,
         merge_options: list[str],
         link_options: list[str],
-        is_duplicate: bool = False,
     ) -> ctk.CTkFrame:
         block = ctk.CTkFrame(
             self._notes_scroll, fg_color=("gray88", "gray22"), corner_radius=8
@@ -544,10 +546,9 @@ class NotesTab:
         entry.insert(0, topic_name)
         entry.pack(side="left", padx=(0, 14))
 
-        if is_duplicate:
-            ctk.CTkLabel(
-                row1, text="⚠ Duplicate name", font=("Helvetica", 11), text_color="red"
-            ).pack(side="left", padx=(0, 6))
+        warn_label = ctk.CTkLabel(row1, text="", font=("Helvetica", 11))
+        warn_label.pack(side="left", padx=(4, 8))
+        entry.bind("<KeyRelease>", lambda e: self._refresh_duplicate_warnings())
 
         inc_label = ctk.CTkLabel(row1, text="Include in:", font=("Helvetica", 11), text_color="gray")
         inc_label.pack(side="left", padx=(0, 4))
@@ -653,6 +654,7 @@ class NotesTab:
 
         block_dict.update({
             "topic_entry": entry,
+            "warn_label": warn_label,
             "merge_var": merge_var,
             "merge_menu": merge_menu,
             "as_label": as_label,
@@ -664,6 +666,21 @@ class NotesTab:
         })
         self._blocks.append(block_dict)
         return block
+
+    def _refresh_duplicate_warnings(self):
+        existing = getattr(self, '_existing_names', set())
+        names = [_norm_topic(bd["topic_entry"].get()) for bd in self._blocks]
+        for i, bd in enumerate(self._blocks):
+            nm = names[i]
+            lbl = bd.get("warn_label")
+            if lbl is None:
+                continue
+            if names.count(nm) > 1:
+                lbl.configure(text="⚠ Duplicate name", text_color="red")
+            elif nm in existing:
+                lbl.configure(text="⚠ Existing note", text_color="#CC8800")
+            else:
+                lbl.configure(text="")
 
     def _parse_topics(self, text: str) -> list[tuple[str, str]]:
         import re
