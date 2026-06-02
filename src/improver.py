@@ -341,6 +341,10 @@ class Improver:
                 result.append(line)
             elif in_laws and re.match(r'^-\s*\$?[a-zA-Z]\(x\)\$?\s*=', s):
                 pass  # drop function-definition bullet from Laws only
+            elif in_laws and s.startswith('- ') and not re.search(
+                r'[∀∃∧∨¬↔→≡≠≤≥≈∈∉∅\\$^]|(?<![a-zA-Z])[=+\-*/<>]', s[2:]
+            ):
+                pass  # drop plain-English definitional sentences from Laws
             else:
                 result.append(line)
 
