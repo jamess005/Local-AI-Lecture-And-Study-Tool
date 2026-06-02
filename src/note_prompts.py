@@ -46,10 +46,6 @@ concrete numeric values for that concept's Example section — include them, do 
 - If the transcript distinguishes named variants as separate cases \
 (e.g. Increasing Linear Function vs Decreasing Linear Function, \
 Exponential Growth vs Exponential Decay), extract each variant as its own TOPIC block.
-- Every TOPIC name must be unique within the output. When multiple blocks cover variants of \
-the same concept, include a differentiating qualifier in each name \
-(e.g. "Predicate with Two Parameters" and "Predicate with Three Parameters", \
-not both "Predicate with Multiple Parameters").
 - When a technique or proof method explicitly names its steps or components \
 (e.g. "this is called the basis", "this step is called the inductive step", \
 "this assumption is called the inductive hypothesis"), extract each named component \

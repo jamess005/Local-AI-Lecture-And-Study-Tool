@@ -474,6 +474,10 @@ class NotesTab:
         all_names = sorted(set(generated_names) | set(existing))
         link_options = [_NO_LINK] + all_names
 
+        _norm = lambda n: re.sub(r'\s+', ' ', n.strip().lower())
+        norm_names = [_norm(n) for n, _ in sections]
+        dup_set = {n for n in norm_names if norm_names.count(n) > 1}
+
         for w in self._notes_scroll.winfo_children():
             w.destroy()
         self._blocks = []
@@ -484,7 +488,8 @@ class NotesTab:
         for topic_name, content in sections:
             other_generated = [n for n in generated_names if n != topic_name]
             merge_options = [_STANDALONE] + sorted(set(existing) | set(other_generated))
-            block = self._build_block(topic_name, content, merge_options, link_options)
+            is_dup = _norm(topic_name) in dup_set
+            block = self._build_block(topic_name, content, merge_options, link_options, is_duplicate=is_dup)
             block.update_idletasks()
 
         if not getattr(self, '_scroll_resize_bound', False):
@@ -522,6 +527,7 @@ class NotesTab:
         content: str,
         merge_options: list[str],
         link_options: list[str],
+        is_duplicate: bool = False,
     ) -> ctk.CTkFrame:
         block = ctk.CTkFrame(
             self._notes_scroll, fg_color=("gray88", "gray22"), corner_radius=8
@@ -537,6 +543,11 @@ class NotesTab:
         entry = ctk.CTkEntry(row1, width=190, font=("Helvetica", 12))
         entry.insert(0, topic_name)
         entry.pack(side="left", padx=(0, 14))
+
+        if is_duplicate:
+            ctk.CTkLabel(
+                row1, text="⚠ Duplicate name", font=("Helvetica", 11), text_color="red"
+            ).pack(side="left", padx=(0, 6))
 
         inc_label = ctk.CTkLabel(row1, text="Include in:", font=("Helvetica", 11), text_color="gray")
         inc_label.pack(side="left", padx=(0, 4))
