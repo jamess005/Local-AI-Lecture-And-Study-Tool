@@ -13,10 +13,9 @@ Example:
 - <concrete step or value from the transcript>
 
 === INSTRUCTIONS ===
-- <SourceConstraint>Omit the Laws section entirely if the lecturer does not explicitly \
-state each law. Do not generate a law from training knowledge even when the concept name \
-suggests its laws are known — each bullet must trace directly to something the \
-lecturer said.</SourceConstraint>
+- Omit the Laws section entirely if the lecturer does not explicitly state each law. \
+Do not generate a law from training knowledge even when the concept name suggests \
+its laws are known — each bullet must trace directly to something the lecturer said.
 - Omit the Example section entirely if the transcript provides no concrete numeric values.
 - Do NOT extract domain/range descriptions ("all real numbers", "real positive numbers"), \
 specific shared points ("(0,1)"), or closing summaries — only formally defined concepts.
