@@ -558,21 +558,30 @@ class Improver:
 
     def _normalize_math_symbols(self, text: str) -> str:
         import re
+        _SYMBOL_MAP = {
+            'sigma star':  'Σ* (Sigma Star)',
+            'sigma plus':  'Σ⁺ (Sigma Plus)',
+            'sigma k':     'Σᵏ (Sigma K)',
+            'sigma two':   'Σ² (Sigma Two)',
+            'sigma three': 'Σ³ (Sigma Three)',
+            'sigma one':   'Σ¹ (Sigma One)',
+            'sigma':       'Σ (Sigma)',
+            'epsilon':     'ε (Epsilon)',
+        }
+        # Single-pass: compound forms listed before standalone sigma so they
+        # match first and the engine skips past them — no double-expansion.
+        _PATTERN = re.compile(
+            r'(?i)\bsigma\s+star\b|\bsigma\s+plus\b|\bsigma\s+k\b'
+            r'|\bsigma\s+two\b|\bsigma\s+three\b|\bsigma\s+one\b'
+            r'|\bsigma\b|\bepsilon\b'
+        )
         lines = text.splitlines()
         out = []
         for line in lines:
             if line.strip().lower().startswith("topic:"):
                 out.append(line)
                 continue
-            line = re.sub(r'(?i)\bsigma\s+star\b', 'Σ* (Sigma Star)', line)
-            line = re.sub(r'(?i)\bsigma\s+plus\b', 'Σ⁺ (Sigma Plus)', line)
-            line = re.sub(r'(?i)\bsigma\s+k\b', 'Σᵏ (Sigma K)', line)
-            line = re.sub(r'(?i)\bsigma\s+two\b', 'Σ² (Sigma Two)', line)
-            line = re.sub(r'(?i)\bsigma\s+three\b', 'Σ³ (Sigma Three)', line)
-            line = re.sub(r'(?i)\bsigma\s+one\b', 'Σ¹ (Sigma One)', line)
-            line = re.sub(r'(?i)\bsigma\b', 'Σ (Sigma)', line)
-            line = re.sub(r'(?i)\bepsilon\b', 'ε (Epsilon)', line)
-            out.append(line)
+            out.append(_PATTERN.sub(lambda m: _SYMBOL_MAP[m.group(0).lower()], line))
         return "\n".join(out)
 
     def evaluate_answer(self, question: str, note_content: str, spoken_answer: str) -> str:
