@@ -184,6 +184,7 @@ class NotesTab:
         self._blocks: list[dict] = []
         self._notes_shown = False
         self._main_topic: str | None = None
+        self._link_all_snapshot: list[str] | None = None
         self._cancel_generation = False
         self._mode = "multi"
 
@@ -346,6 +347,13 @@ class NotesTab:
             fg_color="#555", font=("Helvetica", 12),
             command=self._on_copy_all_notes,
         ).pack(side="right", padx=(0, 6))
+
+        self._undo_link_btn = ctk.CTkButton(
+            self._notes_header, text="Undo", width=70, height=34,
+            fg_color="#555", font=("Helvetica", 12),
+            state="disabled", command=self._on_undo_link_all,
+        )
+        self._undo_link_btn.pack(side="right", padx=(0, 4))
 
         self._link_all_btn = ctk.CTkButton(
             self._notes_header, text="Link all", width=90, height=34,
@@ -829,10 +837,22 @@ class NotesTab:
             self._frame.clipboard_clear()
             self._frame.clipboard_append("\n\n---\n\n".join(parts))
 
+    def _on_undo_link_all(self):
+        if not self._link_all_snapshot:
+            return
+        for b, saved in zip(self._blocks, self._link_all_snapshot):
+            box = b["textbox"]
+            box.delete("1.0", "end")
+            box.insert("1.0", saved)
+        self._link_all_snapshot = None
+        self._undo_link_btn.configure(state="disabled")
+
     def _on_link_all(self):
         topic = self._link_entry.get().strip()
         if not topic:
             return
+        self._link_all_snapshot = [b["textbox"].get("1.0", "end") for b in self._blocks]
+        self._undo_link_btn.configure(state="normal")
         wikilink = f"[[{topic}]]\n\n"
         for b in self._blocks:
             if b["merge_var"].get() != _STANDALONE:

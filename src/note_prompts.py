@@ -53,7 +53,8 @@ Exponential Growth vs Exponential Decay), extract each variant as its own TOPIC 
 (e.g. "this is called the basis", "this step is called the inductive step", \
 "this assumption is called the inductive hypothesis"), extract each named component \
 as its own TOPIC block using the lecturer's exact name as the TOPIC header.
-- $\\mathbb{Z}$ integers, $\\mathbb{R}$ reals. $D_f$ domain, $R_f$ range.
+- $\\mathbb{Z}$ integers, $\\mathbb{R}$ reals. $D_f$ domain, $R_f$ range. \
+Σ alphabet, ε empty string, Σ* sigma star, Σ⁺ sigma plus.
 - LaTeX only for backslash commands and subscripts. Unicode: ∈ ∉ ∅ ≤ ≥ → ↔.
 - Write TOPIC blocks in the order concepts are introduced in the transcript.
 - TOPIC: must be the first characters of your response. No preamble. \
