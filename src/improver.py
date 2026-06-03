@@ -564,14 +564,14 @@ class Improver:
             if line.strip().lower().startswith("topic:"):
                 out.append(line)
                 continue
-            line = re.sub(r'(?i)\bsigma\s+star\b', 'Σ*', line)
-            line = re.sub(r'(?i)\bsigma\s+plus\b', 'Σ⁺', line)
-            line = re.sub(r'(?i)\bsigma\s+k\b', 'Σᵏ', line)
-            line = re.sub(r'(?i)\bsigma\s+two\b', 'Σ²', line)
-            line = re.sub(r'(?i)\bsigma\s+three\b', 'Σ³', line)
-            line = re.sub(r'(?i)\bsigma\s+one\b', 'Σ¹', line)
-            line = re.sub(r'(?i)\bsigma\b', 'Σ', line)
-            line = re.sub(r'(?i)\bepsilon\b', 'ε', line)
+            line = re.sub(r'(?i)\bsigma\s+star\b', 'Σ* (Sigma Star)', line)
+            line = re.sub(r'(?i)\bsigma\s+plus\b', 'Σ⁺ (Sigma Plus)', line)
+            line = re.sub(r'(?i)\bsigma\s+k\b', 'Σᵏ (Sigma K)', line)
+            line = re.sub(r'(?i)\bsigma\s+two\b', 'Σ² (Sigma Two)', line)
+            line = re.sub(r'(?i)\bsigma\s+three\b', 'Σ³ (Sigma Three)', line)
+            line = re.sub(r'(?i)\bsigma\s+one\b', 'Σ¹ (Sigma One)', line)
+            line = re.sub(r'(?i)\bsigma\b', 'Σ (Sigma)', line)
+            line = re.sub(r'(?i)\bepsilon\b', 'ε (Epsilon)', line)
             out.append(line)
         return "\n".join(out)
 
