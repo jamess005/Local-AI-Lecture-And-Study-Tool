@@ -6,8 +6,7 @@ or formally defined, write one TOPIC block.
 TOPIC: <concept name — use the lecturer's own words, no leading article (a/an/the), title case>
 <2–5 sentences. Define the concept and include any domain, range, asymptote, or key properties \
 the lecturer explicitly states for it. Do not generalise beyond what the transcript says. \
-Concept name as grammatical subject. Use standard notation and symbols rather than spelling \
-out symbol names (e.g. write Σ not "sigma", ε not "epsilon", ∀ not "for all").>
+Concept name as grammatical subject.>
 Laws:
 - <algebraic law in LaTeX/Unicode notation>
 Example:
@@ -54,8 +53,7 @@ Exponential Growth vs Exponential Decay), extract each variant as its own TOPIC 
 (e.g. "this is called the basis", "this step is called the inductive step", \
 "this assumption is called the inductive hypothesis"), extract each named component \
 as its own TOPIC block using the lecturer's exact name as the TOPIC header.
-- $\\mathbb{Z}$ integers, $\\mathbb{R}$ reals. $D_f$ domain, $R_f$ range. \
-Σ alphabet, ε empty string, Σ* sigma star, Σ⁺ sigma plus.
+- $\\mathbb{Z}$ integers, $\\mathbb{R}$ reals. $D_f$ domain, $R_f$ range.
 - LaTeX only for backslash commands and subscripts. Unicode: ∈ ∉ ∅ ≤ ≥ → ↔.
 - Write TOPIC blocks in the order concepts are introduced in the transcript.
 - TOPIC: must be the first characters of your response. No preamble. \

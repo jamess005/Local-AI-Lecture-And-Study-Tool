@@ -182,7 +182,7 @@ class Improver:
                                     seen.add(name)
                                 paras.append("\n".join(current))
                     text = "TOPIC: " + header + "\n" + "\n\n".join(paras)
-                return text
+                return self._normalize_math_symbols(text)
 
             from note_prompts import MULTI_PROMPT
             raw = self._generate([
@@ -205,7 +205,7 @@ class Improver:
                     if examples:
                         blocks[idx] = blocks[idx].rstrip() + "\nExample:\n" + examples
             blocks.sort(key=lambda b: (1 if "Example:" in b else 0))
-            return self._postprocess_notes("\n\n".join(blocks))
+            return self._normalize_math_symbols(self._postprocess_notes("\n\n".join(blocks)))
         finally:
             self.unload()
 
@@ -555,6 +555,25 @@ class Improver:
         while cleaned and not cleaned[-1].strip():
             cleaned.pop()
         return "\n".join(cleaned)
+
+    def _normalize_math_symbols(self, text: str) -> str:
+        import re
+        lines = text.splitlines()
+        out = []
+        for line in lines:
+            if line.strip().lower().startswith("topic:"):
+                out.append(line)
+                continue
+            line = re.sub(r'(?i)\bsigma\s+star\b', 'Σ*', line)
+            line = re.sub(r'(?i)\bsigma\s+plus\b', 'Σ⁺', line)
+            line = re.sub(r'(?i)\bsigma\s+k\b', 'Σᵏ', line)
+            line = re.sub(r'(?i)\bsigma\s+two\b', 'Σ²', line)
+            line = re.sub(r'(?i)\bsigma\s+three\b', 'Σ³', line)
+            line = re.sub(r'(?i)\bsigma\s+one\b', 'Σ¹', line)
+            line = re.sub(r'(?i)\bsigma\b', 'Σ', line)
+            line = re.sub(r'(?i)\bepsilon\b', 'ε', line)
+            out.append(line)
+        return "\n".join(out)
 
     def evaluate_answer(self, question: str, note_content: str, spoken_answer: str) -> str:
         from study_prompts import EVALUATE_ANSWER
