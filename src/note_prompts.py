@@ -6,7 +6,8 @@ or formally defined, write one TOPIC block.
 TOPIC: <concept name — use the lecturer's own words, no leading article (a/an/the), title case>
 <2–5 sentences. Define the concept and include any domain, range, asymptote, or key properties \
 the lecturer explicitly states for it. Do not generalise beyond what the transcript says. \
-Concept name as grammatical subject.>
+Concept name as grammatical subject. Use standard notation and symbols rather than spelling \
+out symbol names (e.g. write Σ not "sigma", ε not "epsilon", ∀ not "for all").>
 Laws:
 - <algebraic law in LaTeX/Unicode notation>
 Example:
