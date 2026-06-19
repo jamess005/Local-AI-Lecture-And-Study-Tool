@@ -1,4 +1,5 @@
 import os
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -116,7 +117,8 @@ class Improver:
         self._model = None
         self._tokenizer = None
         gc.collect()
-        torch.cuda.empty_cache()
+        if torch.cuda.is_initialized():
+            torch.cuda.empty_cache()
 
     def improve(self, raw_text: str, role: str = "Software Engineer", mode: str = "Instruct") -> str:
         persona = ROLE_PROMPTS.get(role, ROLE_PROMPTS["Software Engineer"])
@@ -131,9 +133,10 @@ class Improver:
     def generate_question(self, note_content: str, style: str = "Flashcard") -> str:
         from study_prompts import FLASHCARD_QUESTION, EXTENDED_QUESTION
         system = FLASHCARD_QUESTION if style == "Flashcard" else EXTENDED_QUESTION
+        clean = re.sub(r"\[\[.*?\]\]", "", note_content).strip()
         messages = [
             {"role": "system", "content": system},
-            {"role": "user", "content": note_content},
+            {"role": "user", "content": clean},
         ]
         return self._generate(messages, max_new_tokens=128)
 
@@ -595,7 +598,7 @@ class Improver:
             {"role": "system", "content": EVALUATE_ANSWER},
             {"role": "user", "content": user_content},
         ]
-        return self._generate(messages, max_new_tokens=256)
+        return self._generate(messages, max_new_tokens=150)
 
     def _generate(self, messages: list[dict], max_new_tokens: int = 512,
                   enable_thinking: bool = False) -> str:

@@ -32,20 +32,23 @@ def update_score(scores: dict[str, float], key: str, verdict: str) -> dict[str, 
 
 
 def pick_by_confidence(
-    notes: dict[str, dict[str, str]], scores: dict[str, float]
-) -> tuple[str, str, str]:
+    notes: dict[str, dict[str, dict[str, str]]], scores: dict[str, float]
+) -> tuple[str, str, str, str]:
     """Weighted random pick: lower confidence = higher selection weight."""
     all_topics = [
-        (s, t, c) for s, topics in notes.items() for t, c in topics.items()
+        (s, st, t, c)
+        for s, subs in notes.items()
+        for st, topics in subs.items()
+        for t, c in topics.items()
     ]
-    weights = [1.0 - get_score(scores, f"{s}/{t}") for s, t, c in all_topics]
+    weights = [1.0 - get_score(scores, f"{s}/{st}/{t}") for s, st, t, _ in all_topics]
     if all(w == 0.0 for w in weights):
         weights = [1.0] * len(weights)
     return random.choices(all_topics, weights=weights, k=1)[0]
 
 
-def score_key(subject: str, topic: str) -> str:
-    return f"{subject}/{topic}"
+def score_key(subject: str, subtopic: str, topic: str) -> str:
+    return f"{subject}/{subtopic}/{topic}"
 
 
 def load_exclusions() -> set[str]:

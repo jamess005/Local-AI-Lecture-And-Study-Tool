@@ -36,6 +36,8 @@ def _normalize_math_delims(text: str) -> str:
     return "".join(fixed)
 
 _NEW_SUBJECT = "＋ New subject"
+_NO_SUBTOPIC = "(none)"
+_NEW_SUBTOPIC = "＋ New subtopic"
 _STANDALONE = "(standalone)"
 _NO_LINK = "(none)"
 _SECTION_LABELS = ["Example", "Sub-topic", "Technique", "Definition", "Related"]
@@ -200,12 +202,25 @@ class NotesTab:
             d.name for d in base.iterdir()
             if d.is_dir()
             and not d.name.startswith(".")
-            and ((d / ".obsidian").exists() or any(d.glob("*.md")))
+            and ((d / ".obsidian").exists() or any(d.rglob("*.md")))
         )
         return dirs + [_NEW_SUBJECT]
 
-    def _subject_note_names(self, subject: str) -> list[str]:
+    def _subtopic_list(self, subject: str) -> list[str]:
         path = Path(DEFAULT_NOTES_DIR) / subject
+        if not path.exists():
+            return [_NO_SUBTOPIC, _NEW_SUBTOPIC]
+        dirs = sorted(
+            d.name for d in path.iterdir()
+            if d.is_dir() and not d.name.startswith(".")
+        )
+        return [_NO_SUBTOPIC] + dirs + [_NEW_SUBTOPIC]
+
+    def _subject_note_names(self, subject: str, subtopic: str | None = None) -> list[str]:
+        if subtopic and subtopic not in (_NO_SUBTOPIC, _NEW_SUBTOPIC):
+            path = Path(DEFAULT_NOTES_DIR) / subject / subtopic
+        else:
+            path = Path(DEFAULT_NOTES_DIR) / subject
         if not path.exists():
             return []
         return sorted(
@@ -287,6 +302,20 @@ class NotesTab:
         )
         self._mode_btn.set("Multi")
         self._mode_btn.grid(row=0, column=3, padx=(12, 0))
+
+        ctk.CTkLabel(setup, text="Subtopic:", font=("Helvetica", 12)).grid(
+            row=1, column=0, sticky="w", padx=(0, 6), pady=(4, 0)
+        )
+        subtopics = self._subtopic_list(subjects[0] if subjects[0] != _NEW_SUBJECT else "")
+        self._subtopic_var = ctk.StringVar(value=subtopics[0])
+        self._subtopic_menu = ctk.CTkOptionMenu(
+            setup, values=subtopics, variable=self._subtopic_var,
+            width=220, font=("Helvetica", 12), command=self._on_subtopic_change,
+        )
+        self._subtopic_menu.grid(row=1, column=1, sticky="w", padx=(0, 8), pady=(4, 0))
+        self._new_subtopic_entry = ctk.CTkEntry(
+            setup, placeholder_text="New subtopic name", width=200, font=("Helvetica", 12)
+        )
 
         # Transcription input
         ctk.CTkLabel(
@@ -380,8 +409,21 @@ class NotesTab:
             self._new_subject_entry.grid(row=0, column=2, sticky="w", padx=(0, 6))
         else:
             self._new_subject_entry.grid_forget()
+        subtopics = self._subtopic_list(value if value != _NEW_SUBJECT else "")
+        self._subtopic_var.set(subtopics[0])
+        self._subtopic_menu.configure(values=subtopics)
+        self._new_subtopic_entry.grid_forget()
         if self._blocks:
             self._refresh_merge_menus(value)
+
+    def _on_subtopic_change(self, value: str):
+        if value == _NEW_SUBTOPIC:
+            self._new_subtopic_entry.grid(row=1, column=2, sticky="w", padx=(0, 6), pady=(4, 0))
+        else:
+            self._new_subtopic_entry.grid_forget()
+        if self._blocks:
+            subject = self._subject_var.get()
+            self._refresh_merge_menus(subject)
 
     # ── Button state helpers ──────────────────────────────────────────────────
 
@@ -721,7 +763,9 @@ class NotesTab:
     # ── Save ──────────────────────────────────────────────────────────────────
 
     def _refresh_merge_menus(self, subject: str):
-        existing = self._subject_note_names(subject) if subject != _NEW_SUBJECT else []
+        subtopic_val = self._subtopic_var.get() if hasattr(self, "_subtopic_var") else _NO_SUBTOPIC
+        subtopic = subtopic_val if subtopic_val not in (_NO_SUBTOPIC, _NEW_SUBTOPIC) else None
+        existing = self._subject_note_names(subject, subtopic) if subject != _NEW_SUBJECT else []
         generated_names = [b["topic_entry"].get().strip() for b in self._blocks]
         for b in self._blocks:
             topic_name = b["topic_entry"].get().strip()
@@ -745,6 +789,18 @@ class NotesTab:
 
         if not subject:
             self._status.configure(text="Enter a subject name.")
+            return
+
+        subtopic_val = self._subtopic_var.get()
+        if subtopic_val == _NEW_SUBTOPIC:
+            subtopic = self._new_subtopic_entry.get().strip()
+        elif subtopic_val == _NO_SUBTOPIC:
+            subtopic = ""
+        else:
+            subtopic = subtopic_val
+
+        if subtopic and ("/" in subtopic or "\\" in subtopic or ".." in subtopic):
+            self._status.configure(text="Invalid subtopic name.")
             return
 
         block_data = [
@@ -777,11 +833,12 @@ class NotesTab:
                     f"\n\n## {bd['section_label']}: {bd['topic']}\n{bd['content']}"
                 )
 
+        note_dir = Path(DEFAULT_NOTES_DIR) / subject / subtopic if subtopic else Path(DEFAULT_NOTES_DIR) / subject
         saved = []
         for topic, content in final.items():
             if not topic or "/" in topic or "\\" in topic or ".." in topic:
                 continue
-            path = Path(DEFAULT_NOTES_DIR) / subject / f"{topic}.md"
+            path = note_dir / f"{topic}.md"
             path.parent.mkdir(parents=True, exist_ok=True)
             index_path = Path(DEFAULT_NOTES_DIR) / f"{subject}.md"
             if not index_path.exists():
@@ -794,7 +851,7 @@ class NotesTab:
             target = bd["merge_into"]
             if target == _STANDALONE or target in final or not bd["content"]:
                 continue
-            target_path = Path(DEFAULT_NOTES_DIR) / subject / f"{target}.md"
+            target_path = note_dir / f"{target}.md"
             if not target_path.exists():
                 continue
             existing_text = target_path.read_text(encoding="utf-8")
@@ -814,9 +871,16 @@ class NotesTab:
             self._subject_var.set(subject)
             self._new_subject_entry.grid_forget()
 
+        if subtopic_val == _NEW_SUBTOPIC and subtopic:
+            subtopics = self._subtopic_list(subject)
+            self._subtopic_menu.configure(values=subtopics)
+            self._subtopic_var.set(subtopic)
+            self._new_subtopic_entry.grid_forget()
+
         self._refresh_merge_menus(subject)
         plural = "s" if len(saved) != 1 else ""
-        self._status.configure(text=f"Saved {len(saved)} note{plural} → {subject}/")
+        dest = f"{subject}/{subtopic}/" if subtopic else f"{subject}/"
+        self._status.configure(text=f"Saved {len(saved)} note{plural} → {dest}")
 
     # ── Misc ──────────────────────────────────────────────────────────────────
 
