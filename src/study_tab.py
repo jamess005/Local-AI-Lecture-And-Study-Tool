@@ -536,10 +536,7 @@ class StudyTab:
         ).start()
 
     def _do_evaluate(self, answer: str, content: str):
-        try:
-            result = self._improver.evaluate_answer(self._current_question, content, answer)
-        finally:
-            self._improver.unload()
+        result = self._improver.evaluate_answer(self._current_question, content, answer)
         self._frame.after(0, lambda: self._on_result(result))
 
     def _on_result(self, result: str):

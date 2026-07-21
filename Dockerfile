@@ -1,3 +1,8 @@
+# BROKEN as of the vLLM migration: this base image ships Python 3.11, but
+# vLLM's pre-built ROCm wheels (requirements.txt) are Python-3.12-only, so
+# `pip install -r requirements.txt` will fail to resolve a working vLLM here.
+# Needs a Python-3.12 ROCm base image (and system libopenmpi3t64 + miopen-hip,
+# see README) before this Dockerfile is usable again — not yet validated.
 FROM rocm/pytorch:rocm7.1_ubuntu22.04_py3.11_pytorch_2.4.0
 
 WORKDIR /app

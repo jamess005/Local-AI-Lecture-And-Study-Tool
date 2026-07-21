@@ -1,13 +1,15 @@
 import os
 import re
+import threading
 from dotenv import load_dotenv
 
 load_dotenv()
 os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-import torch
+from transformers import AutoTokenizer
+from vllm import LLM, SamplingParams
+from vllm.inputs import TokensPrompt
 from typing import Any
 
 
@@ -82,43 +84,82 @@ MODES = list(MODE_FORMATS.keys())
 class Improver:
     def __init__(self):
         self._model: Any = None
+        # A constructed-but-sleeping vLLM engine, kept around by unload() so a
+        # later load() can wake_up() in ~2-6s instead of re-loading from disk
+        # (~5 minutes for this model) — see feedback_long_running_commands /
+        # project_voiceagent_inference_stack memory for how this was measured.
+        self._sleeping_model: Any = None
         self._tokenizer: Any = None
+        self._eos_token_ids: list[int] | None = None
+        self._lock = threading.Lock()
 
     def load(self):
-        import json
-        from pathlib import Path
-        model_path = os.environ["MODEL_PATH"]
-        self._tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
-        cfg = json.loads((Path(model_path) / "config.json").read_text())
-        quant_method = cfg.get("quantization_config", {}).get("quant_method", "")
-        if quant_method == "awq":
-            # AWQ pre-quantized model — no bitsandbytes kernels, safe on ROCm
-            from awq import AutoAWQForCausalLM
-            self._model = AutoAWQForCausalLM.from_quantized(
-                model_path,
-                fuse_layers=False,
+        with self._lock:
+            if self._model is not None:
+                return
+            if self._sleeping_model is not None:
+                self._sleeping_model.wake_up()
+                self._model = self._sleeping_model
+                self._sleeping_model = None
+                return
+            import json
+            from pathlib import Path
+            model_path = os.environ["MODEL_PATH"]
+            self._tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+            gen_cfg_path = Path(model_path) / "generation_config.json"
+            if gen_cfg_path.exists():
+                gen_cfg = json.loads(gen_cfg_path.read_text())
+                eos = gen_cfg.get("eos_token_id")
+                if eos is not None:
+                    self._eos_token_ids = eos if isinstance(eos, list) else [eos]
+            self._model = LLM(
+                model=model_path,
+                quantization="awq",
+                dtype="auto",
+                max_model_len=8192,
+                gpu_memory_utilization=0.85,
+                enforce_eager=True,
+                enable_sleep_mode=True,
+                # Default safetensors loading stages each of this AWQ
+                # checkpoint's ~1000 small tensors through a CPU copy before
+                # placing them on GPU, which measured at ~285s. The Runai
+                # Model Streamer loader stages tensors for GPU directly and
+                # measured at ~5s for the same checkpoint.
+                load_format="runai_streamer",
             )
-        else:
-            # Standard model — quantize at load time with bitsandbytes
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16
-            )
-            self._model = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                quantization_config=bnb_config,
-                device_map="auto",
-                max_memory={0: "15GiB", "cpu": "20GiB"},
-                low_cpu_mem_usage=True,
-            )
-        self._model.eval()
 
     def unload(self):
-        import gc
-        self._model = None
-        self._tokenizer = None
-        gc.collect()
-        if torch.cuda.is_initialized():
-            torch.cuda.empty_cache()
+        with self._lock:
+            if self._model is None:
+                return
+            self._model.sleep(level=1)
+            self._sleeping_model = self._model
+            self._model = None
+            import gc
+            gc.collect()
+
+    def shutdown(self):
+        # Fully terminate the vLLM engine subprocess (unlike unload(), which
+        # keeps it alive asleep). vLLM's LLM class has no public close/__del__
+        # — left alone, the engine-core subprocess outlives the parent
+        # process and keeps holding VRAM. Call this on app exit only.
+        # Uses a short timeout rather than blocking indefinitely: if load()
+        # is mid-construction (the ~5 min cold load), there's nothing useful
+        # to do here — better to let the window close than hang on exit.
+        if not self._lock.acquire(timeout=2):
+            return
+        try:
+            model = self._model or self._sleeping_model
+            self._model = None
+            self._sleeping_model = None
+            if model is None:
+                return
+            try:
+                model.llm_engine.engine_core.shutdown()
+            except Exception:
+                pass
+        finally:
+            self._lock.release()
 
     def improve(self, raw_text: str, role: str = "Software Engineer", mode: str = "Instruct") -> str:
         persona = ROLE_PROMPTS.get(role, ROLE_PROMPTS["Software Engineer"])
@@ -143,74 +184,71 @@ class Improver:
     def generate_notes(self, transcription: str, mode: str = "multi") -> str:
         if self._model is None:
             self.load()
-        try:
-            if mode == "single":
-                from note_prompts import SINGLE_PROMPT
-                raw = self._generate([
-                    {"role": "system", "content": SINGLE_PROMPT},
-                    {"role": "user", "content": transcription},
-                ], max_new_tokens=2048).strip()
-                if not raw:
-                    return ""
-                result = self._postprocess_notes(raw)
-                text = result if result.strip() else raw
-                blocks = self._split_topic_blocks(text)
-                if blocks:
-                    header = self._extract_topic(blocks[0]).title()
-                    seen: set[str] = set()
-                    paras: list[str] = []
-                    for b in blocks:
-                        current: list[str] = []
-                        for line in b.splitlines():
-                            if line.startswith("TOPIC:"):
-                                continue
-                            if line.strip():
-                                current.append(line)
-                            else:
-                                if current:
-                                    colon = current[0].find(":")
-                                    name = current[0][:colon].strip() if colon > 0 else ""
-                                    if name and name in seen:
-                                        current = []
-                                        continue
-                                    if name:
-                                        seen.add(name)
-                                    paras.append("\n".join(current))
-                                    current = []
-                        if current:
-                            colon = current[0].find(":")
-                            name = current[0][:colon].strip() if colon > 0 else ""
-                            if not (name and name in seen):
-                                if name:
-                                    seen.add(name)
-                                paras.append("\n".join(current))
-                    text = "TOPIC: " + header + "\n" + "\n\n".join(paras)
-                return self._normalize_math_symbols(text)
-
-            from note_prompts import MULTI_PROMPT
+        if mode == "single":
+            from note_prompts import SINGLE_PROMPT
             raw = self._generate([
-                {"role": "system", "content": MULTI_PROMPT},
+                {"role": "system", "content": SINGLE_PROMPT},
                 {"role": "user", "content": transcription},
             ], max_new_tokens=2048).strip()
             if not raw:
                 return ""
-            blocks = self._split_topic_blocks(raw)
-            if not blocks:
-                return ""
-            blocks = [self._verify_block_laws(b) for b in blocks]
-            blocks = [self._strip_function_defs_from_laws(b) for b in blocks]
-            exercise_blocks = self._extract_exercise_blocks(transcription)
-            for ex_block in exercise_blocks:
-                ex_topic = self._extract_topic(ex_block)
-                idx = self._find_concept_block_for_exercise(ex_topic, blocks)
-                if idx is not None and "Example:" not in blocks[idx]:
-                    examples = self._extract_example_section(ex_block)
-                    if examples:
-                        blocks[idx] = blocks[idx].rstrip() + "\nExample:\n" + examples
-            blocks.sort(key=lambda b: (1 if "Example:" in b else 0))
-            return self._normalize_math_symbols(self._postprocess_notes("\n\n".join(blocks)))
-        finally:
-            self.unload()
+            result = self._postprocess_notes(raw)
+            text = result if result.strip() else raw
+            blocks = self._split_topic_blocks(text)
+            if blocks:
+                header = self._extract_topic(blocks[0]).title()
+                seen: set[str] = set()
+                paras: list[str] = []
+                for b in blocks:
+                    current: list[str] = []
+                    for line in b.splitlines():
+                        if line.startswith("TOPIC:"):
+                            continue
+                        if line.strip():
+                            current.append(line)
+                        else:
+                            if current:
+                                colon = current[0].find(":")
+                                name = current[0][:colon].strip() if colon > 0 else ""
+                                if name and name in seen:
+                                    current = []
+                                    continue
+                                if name:
+                                    seen.add(name)
+                                paras.append("\n".join(current))
+                                current = []
+                    if current:
+                        colon = current[0].find(":")
+                        name = current[0][:colon].strip() if colon > 0 else ""
+                        if not (name and name in seen):
+                            if name:
+                                seen.add(name)
+                            paras.append("\n".join(current))
+                text = "TOPIC: " + header + "\n" + "\n\n".join(paras)
+            return self._normalize_math_symbols(text)
+
+        from note_prompts import MULTI_PROMPT
+        raw = self._generate([
+            {"role": "system", "content": MULTI_PROMPT},
+            {"role": "user", "content": transcription},
+        ], max_new_tokens=2048).strip()
+        if not raw:
+            return ""
+        blocks = self._split_topic_blocks(raw)
+        if not blocks:
+            return ""
+        blocks = [self._verify_block_laws(b) for b in blocks]
+        blocks = [self._strip_function_defs_from_laws(b) for b in blocks]
+        exercise_blocks = self._extract_exercise_blocks(transcription)
+        for ex_block in exercise_blocks:
+            ex_topic = self._extract_topic(ex_block)
+            idx = self._find_concept_block_for_exercise(ex_topic, blocks)
+            if idx is not None and "Example:" not in blocks[idx]:
+                examples = self._extract_example_section(ex_block)
+                if examples:
+                    blocks[idx] = blocks[idx].rstrip() + "\nExample:\n" + examples
+        blocks.sort(key=lambda b: (1 if "Example:" in b else 0))
+        return self._normalize_math_symbols(self._postprocess_notes("\n\n".join(blocks)))
 
     def _accumulate(self, current_notes: str, new_chunk: str) -> str:
         existing = self._split_topic_blocks(current_notes) if current_notes else []
@@ -604,7 +642,7 @@ class Improver:
                   enable_thinking: bool = False) -> str:
         if self._model is None or self._tokenizer is None:
             raise RuntimeError("Model not loaded")
-        model, tokenizer = self._model, self._tokenizer
+        tokenizer = self._tokenizer
         try:
             text = tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True,
@@ -614,19 +652,25 @@ class Improver:
             text = tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True,
             )
-        inputs = tokenizer([text], return_tensors="pt").to("cuda")
-        with torch.no_grad():
-            output_ids = model.generate(  # type: ignore[attr-defined]
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
+        token_ids = tokenizer(text, add_special_tokens=False)["input_ids"]
+        sampling_params = SamplingParams(
+            temperature=0,
+            max_tokens=max_new_tokens,
+            stop_token_ids=self._eos_token_ids or [],
+        )
+        with self._lock:
+            if self._model is None:
+                raise RuntimeError("Model not loaded")
+            outputs = self._model.generate(
+                [TokensPrompt(prompt_token_ids=token_ids)],
+                sampling_params,
+                use_tqdm=False,
             )
-        generated = output_ids[0][inputs["input_ids"].shape[1]:]
+        generated_ids = outputs[0].outputs[0].token_ids
         if enable_thinking:
-            import re
-            raw = tokenizer.decode(generated, skip_special_tokens=False)
+            raw = tokenizer.decode(generated_ids, skip_special_tokens=False)
             output = raw.split('</think>', 1)[1] if '</think>' in raw else raw
             output = re.sub(r'<\|[^|]+\|>', '', output)
         else:
-            output = tokenizer.decode(generated, skip_special_tokens=True)
+            output = outputs[0].outputs[0].text
         return output.strip()

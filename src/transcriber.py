@@ -20,5 +20,9 @@ class Transcriber:
             raise RuntimeError("Model not loaded")
         if len(audio) == 0:
             return ""
-        segments, _ = self._model.transcribe(audio, beam_size=5, language="en")
+        segments, _ = self._model.transcribe(
+            audio, beam_size=5, language="en",
+            vad_filter=True,
+            condition_on_previous_text=False,
+        )
         return " ".join(s.text.strip() for s in segments).strip()

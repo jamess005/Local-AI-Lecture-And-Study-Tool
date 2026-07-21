@@ -6,7 +6,7 @@ An offline desktop application that uses lecture transcriptions, generates struc
 
 ## How it fits together
 
-The three tabs share a single local LLM (Qwen 3.5 9B, 4-bit quantised) loaded on demand. Speech-to-text uses faster-whisper running on CPU, so the GPU stays free for the language model.
+The three tabs share a single local LLM (Qwen3-14B, AWQ 4-bit quantised, served via vLLM) loaded on first use and kept resident in GPU memory for the rest of the session — it's put to sleep (freeing VRAM, waking back up in a few seconds) after a period of Study-tab inactivity rather than being torn down and reloaded on every action. Speech-to-text uses faster-whisper running on CPU, so the GPU stays free for the language model.
 
 Notes are saved as plain Markdown files under the directory set by `NOTES_DIR` — point this at your Obsidian vault and the notes appear there immediately. The Study tab reads from the same directory. When you designate a "Main note" in the Notes tab, all other notes saved in that session have `[[MainTopic]]` prepended, creating Obsidian backlinks that connect related concepts automatically.
 
@@ -87,13 +87,16 @@ Multiple recordings accumulate in the text box before you hit Improve, which is 
 
 | Dependency | Version |
 |---|---|
-| Python | 3.11+ |
-| ROCm | 7.1 (AMD GPU) |
-| PyTorch | 2.4.0+rocm7.1 |
+| Python | 3.12 (required — vLLM's pre-built ROCm wheels are Python-3.12-only) |
+| ROCm | 7.1.1 system install (AMD GPU) |
+| PyTorch | installed automatically as a dependency of the vLLM ROCm wheel — do not `pip install torch` separately first |
+| vLLM | 0.25.1+rocm723 (ROCm build, installed from `https://wheels.vllm.ai/rocm/`) |
 | xclip | any |
 | libportaudio2 | any |
+| libopenmpi3t64 | any (system package — the vLLM ROCm wheel's bundled torch build needs `libmpi_cxx.so.40`) |
+| miopen-hip | matching your ROCm version (system package from the ROCm apt repo — needed for `libMIOpen.so.1`) |
 
-**Hardware:** AMD GPU with ROCm support and ≥8 GB VRAM recommended. Tested on RX 7800 XT (16 GB). Whisper runs on CPU — no GPU memory used for transcription.
+**Hardware:** AMD GPU with ROCm support and ≥8 GB VRAM recommended. Tested on RX 7800 XT (16 GB), gfx1100. Whisper runs on CPU — no GPU memory used for transcription. Loading the 14B AWQ model into vLLM takes several minutes the first time (observed ~5 min on this hardware) — this happens once at app startup in a background thread, not on every generation.
 
 ---
 
@@ -110,13 +113,16 @@ sudo apt install python3-tk xclip libportaudio2
 # 3. Create a virtual environment
 python3 -m venv .venv
 
-# 4. Install ROCm-flavoured PyTorch
-.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/rocm7.1
+# 4. Install system libraries the vLLM ROCm wheel needs
+sudo apt-get install -y libopenmpi3t64 miopen-hip
 
-# 5. Install remaining dependencies
+# 5. Install vLLM (ROCm build) — pulls in a compatible torch build automatically
+.venv/bin/pip install vllm==0.25.1+rocm723 --extra-index-url https://wheels.vllm.ai/rocm/
+
+# 6. Install remaining dependencies
 .venv/bin/pip install -r requirements.txt
 
-# 6. Configure
+# 7. Configure
 cp .env.example .env
 # Edit .env — set MODEL_PATH and NOTES_DIR
 ```
@@ -131,7 +137,7 @@ cp .env.example .env
 | `NOTES_DIR` | No | `~/notes` | Where notes are saved and read from. Point this at your Obsidian vault. |
 | `WHISPER_MODEL` | No | `small` | Whisper model size: `tiny`, `base`, `small`, `medium` |
 
-The model is loaded on demand when you first use a tab that needs it, and unloaded after note generation completes to free VRAM.
+The model is loaded on first use of a tab that needs it (or in the background at app startup) and stays resident in GPU memory across Improve/Notes/Study actions. The Study tab puts it to sleep after 5 minutes of inactivity to free VRAM, waking it back up in a few seconds the next time it's needed.
 
 ---
 

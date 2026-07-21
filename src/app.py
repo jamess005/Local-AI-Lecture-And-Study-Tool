@@ -36,6 +36,11 @@ class App(ctk.CTk):
         self._models_loaded = False
 
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        self._improver.shutdown()
+        self.destroy()
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
