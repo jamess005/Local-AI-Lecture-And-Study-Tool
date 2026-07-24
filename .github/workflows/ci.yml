@@ -22,7 +22,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install ruff
-        run: pip install ruff
+        # Pinned: an unpinned `pip install ruff` broke CI when 0.16.0 expanded
+        # its default rule set (adding I001/S110/BLE001/etc.), flagging 36
+        # pre-existing findings across the repo unrelated to any real change.
+        run: pip install ruff==0.15.12
 
       - name: Lint (ruff)
         run: ruff check .
