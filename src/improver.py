@@ -4,8 +4,9 @@ import threading
 from dotenv import load_dotenv
 
 load_dotenv()
+# CUDA_VISIBLE_DEVICES is deprecated on ROCm as of vLLM (removed in v0.26.0) —
+# HIP_VISIBLE_DEVICES is the ROCm-native equivalent.
 os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 from transformers import AutoTokenizer
 from typing import Any
@@ -674,4 +675,24 @@ class Improver:
             output = re.sub(r'<\|[^|]+\|>', '', output)
         else:
             output = outputs[0].outputs[0].text
-        return output.strip()
+        output = output.strip()
+        self._log_generate(messages, len(token_ids), len(generated_ids), output)
+        return output
+
+    def _log_generate(self, messages: list[dict], prompt_tokens: int,
+                       output_tokens: int, output: str):
+        # Temporary diagnostic for an intermittent empty-output report that
+        # hasn't reproduced in isolated testing — see plan for context. Safe
+        # to remove once the real cause is found from a captured occurrence.
+        try:
+            from datetime import datetime
+            log_dir = os.path.join(os.path.dirname(__file__), "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            system_preview = messages[0]["content"][:40] if messages else ""
+            line = (f"{datetime.now().isoformat()} prompt_tokens={prompt_tokens} "
+                    f"output_tokens={output_tokens} empty={not output} "
+                    f"system={system_preview!r}\n")
+            with open(os.path.join(log_dir, "generate_debug.log"), "a") as f:
+                f.write(line)
+        except Exception:
+            pass

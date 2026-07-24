@@ -518,6 +518,10 @@ class NotesTab:
             self._set_idle()
             self._state = IDLE
             self._status.configure(text="Model returned no content — try regenerating.")
+            messagebox.showwarning(
+                "No notes generated",
+                "The model returned no content for this transcript. Try regenerating.",
+            )
             return
         # Strip LaTeX delimiters the model adds (\( ... \), $...$)
         sections = [(name, _normalize_math_delims(content)) for name, content in sections]
