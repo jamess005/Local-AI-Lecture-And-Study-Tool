@@ -8,8 +8,6 @@ os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 from transformers import AutoTokenizer
-from vllm import LLM, SamplingParams
-from vllm.inputs import TokensPrompt
 from typing import Any
 
 
@@ -104,6 +102,7 @@ class Improver:
                 return
             import json
             from pathlib import Path
+            from vllm import LLM
             model_path = os.environ["MODEL_PATH"]
             self._tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
             gen_cfg_path = Path(model_path) / "generation_config.json"
@@ -642,6 +641,8 @@ class Improver:
                   enable_thinking: bool = False) -> str:
         if self._model is None or self._tokenizer is None:
             raise RuntimeError("Model not loaded")
+        from vllm import SamplingParams
+        from vllm.inputs import TokensPrompt
         tokenizer = self._tokenizer
         try:
             text = tokenizer.apply_chat_template(

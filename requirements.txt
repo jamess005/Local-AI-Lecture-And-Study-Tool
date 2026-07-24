@@ -5,4 +5,7 @@ transformers>=4.40
 torch>=2.0
 numpy>=1.24
 python-dotenv>=1.0
-vllm==0.25.1+rocm723
+# vllm is intentionally NOT listed here: the ROCm build this app needs
+# (see README) is only available via --extra-index-url, and pinning a ROCm
+# wheel tag here breaks `pip install -r requirements.txt` on any platform
+# without that index (including CI). Install it separately per the README.
