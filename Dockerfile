@@ -25,4 +25,12 @@ ENV WHISPER_MODEL=small
 ENV MODEL_PATH=/models
 ENV NOTES_DIR=/notes
 
+# Pin to the discrete GPU, matching run.sh. `--device=/dev/dri` (see README)
+# passes through every render node, so the CPU's integrated adapter is visible
+# in here too: it advertises ~15 GiB of shared system RAM but has one compute
+# unit, and the gfx1100 override needed for the 7800 XT produces kernels that
+# are wrong for it. Container runs bypass run.sh, so this has to be set here
+# as well — before the interpreter starts, since ROCm reads it at HSA init.
+ENV HIP_VISIBLE_DEVICES=0
+
 CMD ["python3", "src/app.py"]
