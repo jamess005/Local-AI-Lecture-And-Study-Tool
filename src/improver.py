@@ -12,22 +12,23 @@ from transformers import AutoTokenizer
 from typing import Any
 
 
-# Bound on the host-RAM buffer the Runai streamer uses to stage tensors before
-# placing them on the GPU. Left at its default (unlimited) it holds most of the
-# checkpoint in host memory at once: loading this 9.4 GiB one peaked at 11.05
-# GiB. That peak is what makes co-tenancy fail — vLLM loads in a subprocess, so
-# when the box runs short the kernel OOM-kills it, and being the largest
-# process on the machine it is reliably the one chosen. vLLM reports only
-# "Engine core initialization failed ... Failed core proc(s)"; the actual
-# reason is visible solely in dmesg. Capping at 4 GiB brought the engine-core
-# peak to 8.63 GiB, measured, at a cold load of ~25s.
-LOADER_MEMORY_LIMIT = 4 * 1024 ** 3
-
-# Host RAM a cold load needs on top of what the app already holds: the
-# engine-core peak above, rounded up. Note this is only ~2.4 GiB below the
-# uncapped peak that was being OOM-killed, so the cap alone does not buy a
-# large margin — the check below is what keeps the failure legible.
-LOAD_HOST_MEMORY_BYTES = 9 * 1024 ** 3
+# Host RAM a cold load needs on top of what the app already holds. The Runai
+# streamer stages the checkpoint through an unbounded host buffer, so loading
+# this 9.4 GiB checkpoint peaks at 13.93 GiB (measured, VmHWM of the engine
+# core across 5 cold loads; the figure is stable to 0.01 GiB).
+#
+# Why it is not capped: the streamer takes a memory_limit, and 4 GiB does bring
+# the peak to 8.64 GiB at no cost in load time (~25s either way). But its
+# chunked staging path is broken on this ROCm setup — 2 of 8 capped cold loads
+# died with hipErrorIllegalAddress, against 0 of 5 uncapped. A 25% chance of
+# failing every cold load is a worse trade than the OOM it avoids, which only
+# happens when something else on the box is already holding the memory.
+#
+# So the peak stands, and this check is what makes hitting it legible: vLLM
+# loads in a subprocess and is reliably the largest process on the machine, so
+# a global OOM picks it every time and reports only "Engine core initialization
+# failed ... Failed core proc(s)", with the real reason left in the kernel log.
+LOAD_HOST_MEMORY_BYTES = 14 * 1024 ** 3
 
 
 def available_host_bytes() -> int | None:
@@ -180,7 +181,6 @@ class Improver:
                 # Model Streamer loader stages tensors for GPU directly and
                 # measured at ~5s for the same checkpoint.
                 load_format="runai_streamer",
-                model_loader_extra_config={"memory_limit": LOADER_MEMORY_LIMIT},
             )
 
     def unload(self):
