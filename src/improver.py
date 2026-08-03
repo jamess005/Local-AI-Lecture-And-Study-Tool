@@ -12,6 +12,59 @@ from transformers import AutoTokenizer
 from typing import Any
 
 
+# Bound on the host-RAM buffer the Runai streamer uses to stage tensors before
+# placing them on the GPU. Left at its default (unlimited) it holds most of the
+# checkpoint in host memory at once: loading this 9.4 GiB one peaked at 11.05
+# GiB. That peak is what makes co-tenancy fail — vLLM loads in a subprocess, so
+# when the box runs short the kernel OOM-kills it, and being the largest
+# process on the machine it is reliably the one chosen. vLLM reports only
+# "Engine core initialization failed ... Failed core proc(s)"; the actual
+# reason is visible solely in dmesg. Capping at 4 GiB brought the engine-core
+# peak to 8.63 GiB, measured, at a cold load of ~25s.
+LOADER_MEMORY_LIMIT = 4 * 1024 ** 3
+
+# Host RAM a cold load needs on top of what the app already holds: the
+# engine-core peak above, rounded up. Note this is only ~2.4 GiB below the
+# uncapped peak that was being OOM-killed, so the cap alone does not buy a
+# large margin — the check below is what keeps the failure legible.
+LOAD_HOST_MEMORY_BYTES = 9 * 1024 ** 3
+
+
+def available_host_bytes() -> int | None:
+    """Host RAM available for allocation, or None if it cannot be determined.
+
+    MemAvailable rather than MemFree: reclaimable page cache is usable here,
+    and MemFree alone would refuse loads that would in fact succeed.
+    """
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    return None
+
+
+def check_host_memory(available_bytes: int | None,
+                      required_bytes: int = LOAD_HOST_MEMORY_BYTES) -> None:
+    """Fail early, and legibly, when there is too little RAM to load the model.
+
+    Without this the load proceeds until the kernel kills the engine-core
+    subprocess, which surfaces as an opaque core-proc error naming neither
+    memory nor the process that actually exhausted it.
+    """
+    if available_bytes is None:
+        return
+    if available_bytes < required_bytes:
+        raise RuntimeError(
+            f"Not enough free RAM to load the model: {available_bytes / 1024 ** 3:.1f} "
+            f"GiB available, ~{required_bytes / 1024 ** 3:.1f} GiB needed. Other "
+            f"processes on this machine are holding the memory — close them and "
+            f"try again."
+        )
+
+
 ROLE_PROMPTS = {
     "Software Engineer": (
         "You are an experienced software engineer with a strong background in AI, "
@@ -104,6 +157,7 @@ class Improver:
             import json
             from pathlib import Path
             from vllm import LLM
+            check_host_memory(available_host_bytes())
             model_path = os.environ["MODEL_PATH"]
             self._tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
             gen_cfg_path = Path(model_path) / "generation_config.json"
@@ -126,6 +180,7 @@ class Improver:
                 # Model Streamer loader stages tensors for GPU directly and
                 # measured at ~5s for the same checkpoint.
                 load_format="runai_streamer",
+                model_loader_extra_config={"memory_limit": LOADER_MEMORY_LIMIT},
             )
 
     def unload(self):

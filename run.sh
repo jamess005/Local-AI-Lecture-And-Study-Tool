@@ -24,4 +24,13 @@ export HIP_VISIBLE_DEVICES=0
 # matmul never touches MIOpen), which is what makes this one hard to spot.
 export LD_LIBRARY_PATH="/opt/rocm/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+# The desktop entry sets Terminal=false, so stdout and stderr are /dev/null:
+# everything Python and vLLM print on the way down is discarded. That is what
+# turned an OOM-killed engine core into a silent failure — the kernel names the
+# victim in dmesg, but the app itself only ever showed vLLM's "Failed core
+# proc(s)". Keep the output on disk. logs/ is gitignored.
+mkdir -p logs
+exec >> logs/app.log 2>&1
+echo "=== $(date '+%Y-%m-%d %H:%M:%S') starting ==="
+
 exec .venv/bin/python3 src/app.py
