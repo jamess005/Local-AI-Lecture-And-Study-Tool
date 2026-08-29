@@ -8,3 +8,4 @@ Type=Application
 Categories=Education;
 StartupNotify=true
 Path=/home/james/ml-proj/voiceagent
+StartupWMClass=lecture-study-tool
