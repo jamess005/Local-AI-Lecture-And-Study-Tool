@@ -2,7 +2,7 @@
 Name=Lecture & Study Tool
 Comment=Lecture transcription, note generation, and AI study Q&A
 Exec=/home/james/ml-proj/voiceagent/run.sh
-Icon=lecture-study-tool
+Icon=audio-input-microphone
 Terminal=false
 Type=Application
 Categories=Education;

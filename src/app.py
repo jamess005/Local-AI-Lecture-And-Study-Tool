@@ -13,6 +13,39 @@ from logger import log_session
 from study_tab import StudyTab
 from notes_tab import NotesTab
 
+
+def _theme_icon(name: str, sizes: tuple[int, ...] = (64, 48)) -> str | None:
+    """Path to a themed icon file, or None.
+
+    Two directory layouts are both in use on this desktop: Mint-Y keeps
+    `devices/48/`, the hicolor spec keeps `48x48/devices/`. Themes also inherit
+    (Mint-Y-Aqua falls back to Mint-Y), which is why the list below is walked in
+    order rather than trusting the first name.
+    """
+    themes = []
+    try:
+        found = subprocess.run(
+            ["gsettings", "get", "org.cinnamon.desktop.interface", "icon-theme"],
+            capture_output=True, text=True, timeout=2,
+        ).stdout.strip().strip("'")
+        if found:
+            themes.append(found)
+    except Exception:
+        pass
+    themes += ["Mint-Y", "gnome", "Adwaita", "hicolor"]
+
+    roots = [Path.home() / ".local/share/icons", Path("/usr/share/icons")]
+    for theme in themes:
+        for root in roots:
+            for size in sizes:
+                for rel in (f"devices/{size}", f"{size}x{size}/devices",
+                            f"apps/{size}", f"{size}x{size}/apps"):
+                    candidate = root / theme / rel / f"{name}.png"
+                    if candidate.is_file():
+                        return str(candidate)
+    return None
+
+
 ctk.set_appearance_mode("dark")
 # Every widget colour comes from this file, generated from palette.py. The
 # stock "blue" theme is not used: it would fight the palette on every frame,
@@ -36,22 +69,19 @@ class App(ctk.CTk):
         # .desktop entry.
         super().__init__(className="lecture-study-tool")
         self.title("Lecture & Study Tool")
-        # Without this the window carries no _NET_WM_ICON and the desktop shows
-        # a generic icon - which is why this and Stock Manager looked the same.
+        # The window icon must be the one the launcher uses, or the pinned
+        # entry and the open window show different pictures. Tk cannot look an
+        # icon up by theme name the way GTK and Qt can, so _theme_icon walks
+        # the directory layouts by hand.
         #
-        # Two traps here. This Tk (8.6) silently writes an empty property for
-        # anything above 64px - it accepts the image, creates _NET_WM_ICON, and
-        # puts no data in it - so 128 and 256 look like they worked and do not.
-        # And the PhotoImage references must be kept alive on the instance or
-        # Tk drops the images and the icon vanishes.
-        assets = Path(__file__).resolve().parent.parent / "assets"
-        self._icons = [
-            tk.PhotoImage(file=str(p))
-            for size in (48, 64)
-            if (p := assets / f"lecture-study-tool-{size}.png").exists()
-        ]
-        if self._icons:
-            self.after(200, lambda: self.iconphoto(False, *self._icons))
+        # Note this Tk (8.6) silently writes an EMPTY _NET_WM_ICON for a source
+        # above 64px - it accepts the image, creates the property and puts no
+        # data in it - so the sizes asked for stop at 64. And the PhotoImage
+        # reference must be kept alive or Tk drops it.
+        icon = _theme_icon("audio-input-microphone")
+        if icon:
+            self._icon = tk.PhotoImage(file=icon)
+            self.after(200, lambda: self.iconphoto(False, self._icon))
         self.geometry("820x600")
         self.resizable(True, True)
         self.minsize(600, 440)
