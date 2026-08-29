@@ -1,5 +1,6 @@
 import subprocess
 import threading
+import tkinter as tk
 from pathlib import Path
 
 import customtkinter as ctk
@@ -31,8 +32,26 @@ ROLES = list(ROLE_PROMPTS.keys())
 
 class App(ctk.CTk):
     def __init__(self):
-        super().__init__()
+        # className sets WM_CLASS, which was the generic "tk" and so matched no
+        # .desktop entry.
+        super().__init__(className="lecture-study-tool")
         self.title("Lecture & Study Tool")
+        # Without this the window carries no _NET_WM_ICON and the desktop shows
+        # a generic icon - which is why this and Stock Manager looked the same.
+        #
+        # Two traps here. This Tk (8.6) silently writes an empty property for
+        # anything above 64px - it accepts the image, creates _NET_WM_ICON, and
+        # puts no data in it - so 128 and 256 look like they worked and do not.
+        # And the PhotoImage references must be kept alive on the instance or
+        # Tk drops the images and the icon vanishes.
+        assets = Path(__file__).resolve().parent.parent / "assets"
+        self._icons = [
+            tk.PhotoImage(file=str(p))
+            for size in (48, 64)
+            if (p := assets / f"lecture-study-tool-{size}.png").exists()
+        ]
+        if self._icons:
+            self.after(200, lambda: self.iconphoto(False, *self._icons))
         self.geometry("820x600")
         self.resizable(True, True)
         self.minsize(600, 440)
