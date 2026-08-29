@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>Lecture &amp; Study Tool</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#17171b"/><stop offset="1" stop-color="#08080a"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#g)"
+        stroke="#2a2a31" stroke-width="2"/>
+  <!-- waveform on the left: speech going in -->
+  <g stroke="#b4a9ff" stroke-width="7" stroke-linecap="round">
+    <path d="M26 52 V76" opacity="0.55"/>
+    <path d="M40 38 V90"/>
+    <path d="M54 46 V82" opacity="0.8"/>
+  </g>
+  <!-- note lines on the right: text coming out -->
+  <g stroke="#f4f4f6" stroke-width="6" stroke-linecap="round">
+    <path d="M74 46 H104" opacity="0.9"/>
+    <path d="M74 64 H104" opacity="0.65"/>
+    <path d="M74 82 H92"  opacity="0.4"/>
+  </g>
+  <!-- the arrow between them, in the accent -->
+  <path d="M62 64 H70" stroke="#6d4aff" stroke-width="5" stroke-linecap="round"/>
+</svg>

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import customtkinter as ctk
 
+import palette as pal
+
 from note_reader import DEFAULT_NOTES_DIR
 
 
@@ -269,7 +271,7 @@ class NotesTab:
         self._frame.pack(fill="both", expand=True, padx=12, pady=12)
 
         self._status = ctk.CTkLabel(
-            self._frame, text="", font=("Helvetica", 12), text_color="gray", anchor="w"
+            self._frame, text="", font=("Helvetica", 12), text_color=pal.INK2, anchor="w"
         )
         self._status.pack(anchor="w", pady=(0, 6))
 
@@ -320,7 +322,7 @@ class NotesTab:
         # Transcription input
         ctk.CTkLabel(
             self._frame, text="Lecture transcription", font=("Helvetica", 11),
-            text_color="gray",
+            text_color=pal.INK2,
         ).pack(anchor="w")
         self._transcription_box = ctk.CTkTextbox(
             self._frame, height=150, font=("Helvetica", 13), wrap="word",
@@ -339,7 +341,7 @@ class NotesTab:
 
         self._stop_btn = ctk.CTkButton(
             self._btn_row, text="■ Stop", width=100, height=40,
-            font=("Helvetica", 13, "bold"), fg_color="#2980b9",
+            font=("Helvetica", 13, "bold"), fg_color=pal.PRIMARY, hover_color=pal.PRIMARY_HOVER,
             command=self._on_stop,
         )
 
@@ -351,19 +353,19 @@ class NotesTab:
 
         ctk.CTkButton(
             self._btn_row, text="Clear", width=80, height=40,
-            fg_color="#555", command=self._on_clear_transcription,
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, command=self._on_clear_transcription,
         ).pack(side="left", padx=(0, 6))
 
         ctk.CTkButton(
             self._btn_row, text="Copy", width=80, height=40,
-            fg_color="#555", command=self._on_copy_transcript,
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, command=self._on_copy_transcript,
         ).pack(side="left", padx=(0, 6))
 
         # Generated notes area — hidden until first generation
         self._notes_header = ctk.CTkFrame(self._frame, fg_color="transparent")
         ctk.CTkLabel(
             self._notes_header, text="Generated notes", font=("Helvetica", 11),
-            text_color="gray",
+            text_color=pal.INK2,
         ).pack(side="left")
         self._save_btn = ctk.CTkButton(
             self._notes_header, text="Save all to Obsidian", width=160, height=34,
@@ -373,13 +375,13 @@ class NotesTab:
 
         ctk.CTkButton(
             self._notes_header, text="Copy all", width=90, height=34,
-            fg_color="#555", font=("Helvetica", 12),
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, font=("Helvetica", 12),
             command=self._on_copy_all_notes,
         ).pack(side="right", padx=(0, 6))
 
         self._undo_link_btn = ctk.CTkButton(
             self._notes_header, text="Undo", width=70, height=34,
-            fg_color="#555", font=("Helvetica", 12),
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, font=("Helvetica", 12),
             state="disabled", command=self._on_undo_link_all,
         )
         self._undo_link_btn.pack(side="right", padx=(0, 4))
@@ -575,8 +577,8 @@ class NotesTab:
             friendly = "GPU out of memory — try a shorter transcript or restart the app."
         else:
             friendly = message[:80] + ("…" if len(message) > 80 else "")
-        self._status.configure(text=f"Error: {friendly}", text_color="red")
-        self._frame.after(5000, lambda: self._status.configure(text="Ready.", text_color="gray"))
+        self._status.configure(text=f"Error: {friendly}", text_color=pal.BAD)
+        self._frame.after(5000, lambda: self._status.configure(text="Ready.", text_color=pal.INK2))
 
     def _build_block(
         self,
@@ -586,7 +588,7 @@ class NotesTab:
         link_options: list[str],
     ) -> ctk.CTkFrame:
         block = ctk.CTkFrame(
-            self._notes_scroll, fg_color=("gray88", "gray22"), corner_radius=8
+            self._notes_scroll, fg_color=pal.RAISED, corner_radius=8
         )
         block.pack(fill="x", pady=(0, 8), padx=2)
 
@@ -594,7 +596,7 @@ class NotesTab:
         row1 = ctk.CTkFrame(block, fg_color="transparent")
         row1.pack(fill="x", padx=8, pady=(8, 2))
 
-        topic_label = ctk.CTkLabel(row1, text="Topic:", font=("Helvetica", 11), text_color="gray")
+        topic_label = ctk.CTkLabel(row1, text="Topic:", font=("Helvetica", 11), text_color=pal.INK2)
         topic_label.pack(side="left", padx=(0, 4))
         entry = ctk.CTkEntry(row1, width=190, font=("Helvetica", 12))
         entry.insert(0, topic_name)
@@ -604,12 +606,12 @@ class NotesTab:
         warn_label.pack(side="left", padx=(4, 8))
         entry.bind("<KeyRelease>", lambda e: self._refresh_duplicate_warnings())
 
-        inc_label = ctk.CTkLabel(row1, text="Include in:", font=("Helvetica", 11), text_color="gray")
+        inc_label = ctk.CTkLabel(row1, text="Include in:", font=("Helvetica", 11), text_color=pal.INK2)
         inc_label.pack(side="left", padx=(0, 4))
         merge_var = ctk.StringVar(value=_STANDALONE)
 
         # "as:" controls created before the merge menu so the closure can reference them
-        as_label = ctk.CTkLabel(row1, text="as:", font=("Helvetica", 11), text_color="gray")
+        as_label = ctk.CTkLabel(row1, text="as:", font=("Helvetica", 11), text_color=pal.INK2)
         label_var = ctk.StringVar(value=_SECTION_LABELS[0])
         as_menu = ctk.CTkOptionMenu(
             row1, values=_SECTION_LABELS, variable=label_var,
@@ -656,7 +658,7 @@ class NotesTab:
         row3.pack(fill="x", padx=8, pady=(0, 8))
 
         ctk.CTkLabel(
-            row3, text="Insert link:", font=("Helvetica", 11), text_color="gray"
+            row3, text="Insert link:", font=("Helvetica", 11), text_color=pal.INK2
         ).pack(side="left", padx=(0, 4))
 
         link_combo = _SearchableCombo(
@@ -695,14 +697,14 @@ class NotesTab:
 
         main_btn = ctk.CTkButton(
             row3, text="◯ Main", width=80, height=28,
-            fg_color="#555", font=("Helvetica", 11),
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, font=("Helvetica", 11),
             command=lambda: self._on_set_main(block_dict),
         )
         main_btn.pack(side="left", padx=(0, 6))
 
         ctk.CTkButton(
             row3, text="Delete", width=70, height=28,
-            fg_color="#8B2020", font=("Helvetica", 11),
+            fg_color=pal.DANGER, hover_color=pal.DANGER_HOVER, font=("Helvetica", 11),
             command=lambda: self._on_delete_block(block, block_dict),
         ).pack(side="left")
 
@@ -730,9 +732,9 @@ class NotesTab:
             if lbl is None:
                 continue
             if names.count(nm) > 1:
-                lbl.configure(text="⚠ Duplicate name", text_color="red")
+                lbl.configure(text="⚠ Duplicate name", text_color=pal.BAD)
             elif nm in existing:
-                lbl.configure(text="⚠ Existing note", text_color="#CC8800")
+                lbl.configure(text="⚠ Existing note", text_color=pal.WARN)
             else:
                 lbl.configure(text="")
 

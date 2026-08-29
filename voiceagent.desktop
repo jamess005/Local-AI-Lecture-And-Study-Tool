@@ -1,10 +1,10 @@
 [Desktop Entry]
 Name=Lecture & Study Tool
 Comment=Lecture transcription, note generation, and AI study Q&A
-Exec=/path/to/voiceagent/run.sh
-Icon=audio-input-microphone
+Exec=/home/james/ml-proj/voiceagent/run.sh
+Icon=lecture-study-tool
 Terminal=false
 Type=Application
-Categories=Utility;Education;
+Categories=Education;
 StartupNotify=true
-Path=/path/to/voiceagent
+Path=/home/james/ml-proj/voiceagent

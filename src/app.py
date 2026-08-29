@@ -1,7 +1,10 @@
 import subprocess
 import threading
+from pathlib import Path
+
 import customtkinter as ctk
 
+import palette as pal
 from recorder import Recorder
 from transcriber import Transcriber
 from improver import Improver, ROLE_PROMPTS, MODES
@@ -10,7 +13,12 @@ from study_tab import StudyTab
 from notes_tab import NotesTab
 
 ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
+# Every widget colour comes from this file, generated from palette.py. The
+# stock "blue" theme is not used: it would fight the palette on every frame,
+# entry and scrollbar we do not set explicitly.
+ctk.set_default_color_theme(
+    str(Path(__file__).resolve().parent.parent / "themes" / "study-dark.json")
+)
 
 IDLE = "idle"
 LOADING = "loading"
@@ -86,12 +94,12 @@ class App(ctk.CTk):
         )
         self._stop_btn = ctk.CTkButton(
             self._btn_frame, text="■ Stop", width=120, height=44,
-            font=("Helvetica", 15, "bold"), fg_color="#2980b9",
+            font=("Helvetica", 15, "bold"), fg_color=pal.PRIMARY, hover_color=pal.PRIMARY_HOVER,
             command=self._on_stop,
         )
         self._cancel_btn = ctk.CTkButton(
             self._btn_frame, text="Cancel", width=100, height=44,
-            fg_color="#555", command=self._on_cancel,
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, command=self._on_cancel,
         )
         self._improve_btn = ctk.CTkButton(
             self._btn_frame, text="Improve →", width=120, height=44,
@@ -99,7 +107,7 @@ class App(ctk.CTk):
         )
         self._clear_btn = ctk.CTkButton(
             self._btn_frame, text="Clear", width=80, height=44,
-            fg_color="#555", command=self._on_clear,
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, command=self._on_clear,
         )
         self._copy_btn = ctk.CTkButton(
             self._btn_frame, text="Copy", width=80, height=44,

@@ -2,6 +2,8 @@ import re
 import threading
 import customtkinter as ctk
 
+import palette as pal
+
 from note_reader import load_notes, pick_random_subtopic, list_subtopics
 from confidence import (
     load_scores, save_scores, update_score,
@@ -113,7 +115,7 @@ class StudyTab:
         self._frame.pack(fill="both", expand=True, padx=12, pady=12)
 
         self._status = ctk.CTkLabel(
-            self._frame, text="", font=("Helvetica", 12), text_color="gray"
+            self._frame, text="", font=("Helvetica", 12), text_color=pal.INK2
         )
         self._status.pack(anchor="w", pady=(0, 6))
 
@@ -138,7 +140,7 @@ class StudyTab:
         subjects = list(self._notes.keys()) or ["(no notes found)"]
         self._subject_var = ctk.StringVar(value=subjects[0])
         self._subject_label = ctk.CTkLabel(
-            self._setup_frame, text="Subject", font=("Helvetica", 11), text_color="gray",
+            self._setup_frame, text="Subject", font=("Helvetica", 11), text_color=pal.INK2,
         )
         self._subject_label.pack(anchor="w", pady=(0, 2))
         self._subject_menu = ctk.CTkOptionMenu(
@@ -150,7 +152,7 @@ class StudyTab:
         subtopics = ["All"] + list_subtopics(subjects[0])
         self._subtopic_var = ctk.StringVar(value="All")
         self._subtopic_label = ctk.CTkLabel(
-            self._setup_frame, text="Subtopic", font=("Helvetica", 11), text_color="gray",
+            self._setup_frame, text="Subtopic", font=("Helvetica", 11), text_color=pal.INK2,
         )
         self._subtopic_label.pack(anchor="w", pady=(0, 2))
         self._subtopic_menu = ctk.CTkOptionMenu(
@@ -180,7 +182,7 @@ class StudyTab:
         self._start_btn.pack(side="left")
         self._manage_btn = ctk.CTkButton(
             _btn_row, text="Manage exclusions", width=160, height=44,
-            fg_color="#555", command=self._open_exclusions_window,
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, command=self._open_exclusions_window,
         )
         self._manage_btn.pack(side="left", padx=(12, 0))
 
@@ -199,7 +201,7 @@ class StudyTab:
         subjects_ov = list(self._notes.keys()) or ["(no notes found)"]
         self._ov_subject_var = ctk.StringVar(value=subjects_ov[0])
         ctk.CTkLabel(
-            _ov_sel, text="Subject", font=("Helvetica", 11), text_color="gray",
+            _ov_sel, text="Subject", font=("Helvetica", 11), text_color=pal.INK2,
         ).pack(anchor="w", pady=(0, 2))
         ctk.CTkOptionMenu(
             _ov_sel, values=subjects_ov, variable=self._ov_subject_var,
@@ -209,7 +211,7 @@ class StudyTab:
         _ov_subtopics = ["All"] + list_subtopics(subjects_ov[0])
         self._ov_subtopic_var = ctk.StringVar(value="All")
         ctk.CTkLabel(
-            _ov_sel, text="Subtopic", font=("Helvetica", 11), text_color="gray",
+            _ov_sel, text="Subtopic", font=("Helvetica", 11), text_color=pal.INK2,
         ).pack(anchor="w", pady=(0, 2))
         self._ov_subtopic_menu = ctk.CTkOptionMenu(
             _ov_sel, values=_ov_subtopics, variable=self._ov_subtopic_var,
@@ -230,14 +232,14 @@ class StudyTab:
         self._question_label.pack(pady=(8, 4))
 
         self._source_label = ctk.CTkLabel(
-            self._session_frame, text="", font=("Helvetica", 11), text_color="gray",
+            self._session_frame, text="", font=("Helvetica", 11), text_color=pal.INK2,
         )
         self._source_label.pack(pady=(0, 8))
 
         # Always-visible editable answer box
         ctk.CTkLabel(
             self._session_frame, text="Your answer", font=("Helvetica", 11),
-            text_color="gray",
+            text_color=pal.INK2,
         ).pack()
         self._answer_box = ctk.CTkTextbox(
             self._session_frame, width=600, height=90,
@@ -257,7 +259,7 @@ class StudyTab:
 
         self._stop_btn = ctk.CTkButton(
             self._btn_row, text="■ Stop", width=110, height=44,
-            font=("Helvetica", 14, "bold"), fg_color="#2980b9",
+            font=("Helvetica", 14, "bold"), fg_color=pal.PRIMARY, hover_color=pal.PRIMARY_HOVER,
             command=self._on_stop,
         )
 
@@ -269,13 +271,13 @@ class StudyTab:
 
         ctk.CTkButton(
             self._btn_row, text="Clear", width=80, height=44,
-            fg_color="#555", command=self._on_clear_answer,
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, command=self._on_clear_answer,
         ).pack(side="left")
 
         # Feedback box (read-only, shown after evaluation)
         self._feedback_label = ctk.CTkLabel(
             self._session_frame, text="Feedback", font=("Helvetica", 11),
-            text_color="gray",
+            text_color=pal.INK2,
         )
         self._result_box = ctk.CTkTextbox(
             self._session_frame, width=600, height=140,
@@ -303,11 +305,11 @@ class StudyTab:
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             self._nav_row, text="Change topic", width=130, height=40,
-            fg_color="#555", command=self._show_setup,
+            fg_color=pal.NEUTRAL, hover_color=pal.NEUTRAL_HOVER, command=self._show_setup,
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             self._nav_row, text="Exclude subtopic", width=140, height=40,
-            fg_color="#8B0000", command=self._on_exclude,
+            fg_color=pal.DANGER, hover_color=pal.DANGER_HOVER, command=self._on_exclude,
         ).pack(side="left")
 
     def _on_subject_change(self, value: str):
@@ -337,12 +339,14 @@ class StudyTab:
         if not pairs:
             ctk.CTkLabel(
                 self._conf_scroll, text="No notes here yet.",
-                font=("Helvetica", 12), text_color="gray",
+                font=("Helvetica", 12), text_color=pal.INK2,
             ).pack(pady=16)
             return
         for subj, st in sorted(pairs, key=lambda x: x[1]):
             score = self._scores.get(f"{subj}/{st}", 0.5)
-            color = "#c0392b" if score < 0.4 else "#f39c12" if score < 0.7 else "#27ae60"
+            # A confidence score is state, not identity, so it wears the
+            # status colours rather than anything from the series ramp.
+            color = pal.BAD if score < 0.4 else pal.WARN if score < 0.7 else pal.GOOD
             row = ctk.CTkFrame(self._conf_scroll, fg_color="transparent")
             row.pack(fill="x", pady=2)
             ctk.CTkLabel(
@@ -637,13 +641,13 @@ class StudyTab:
         if not self._excluded:
             ctk.CTkLabel(
                 win, text="No notes are currently excluded.",
-                font=("Helvetica", 12), text_color="gray",
+                font=("Helvetica", 12), text_color=pal.INK2,
             ).pack(anchor="w", padx=16, pady=(8, 0))
             return
 
         ctk.CTkLabel(
             win, text="Click Restore to put a note back in the study pool.",
-            font=("Helvetica", 11), text_color="gray",
+            font=("Helvetica", 11), text_color=pal.INK2,
         ).pack(anchor="w", padx=16, pady=(0, 8))
 
         scroll = ctk.CTkScrollableFrame(win, height=300)
@@ -669,5 +673,5 @@ class StudyTab:
             ).pack(side="left", fill="x", expand=True)
             ctk.CTkButton(
                 row, text="Restore", width=80, height=30,
-                fg_color="#2e7d32", command=make_restore(key, row),
+                fg_color=pal.SUCCESS, hover_color=pal.SUCCESS_HOVER, command=make_restore(key, row),
             ).pack(side="right")
