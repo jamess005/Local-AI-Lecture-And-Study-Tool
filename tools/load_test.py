@@ -27,23 +27,19 @@ import bitsandbytes as bnb
 log(f"  bnb version: {bnb.__version__}")
 
 log("importing transformers")
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-MODEL = "/home/james/ml-proj/models/qwen3-14b"
+# The AWQ checkpoint is quantized already, so no BnB config on top.
+MODEL = "/home/james/ml-proj/models/qwen3-14b-awq"
 
 log("loading tokenizer")
 tok = AutoTokenizer.from_pretrained(MODEL, use_fast=True)
 log("  tokenizer OK")
 
-log("building BnB config")
-bnb_cfg = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
-log("  BnB config OK")
-
 log("loading model (this takes 60-90 s) ...")
 try:
     mdl = AutoModelForCausalLM.from_pretrained(
         MODEL,
-        quantization_config=bnb_cfg,
         device_map="auto",
         max_memory={0: "15GiB", "cpu": "20GiB"},
         low_cpu_mem_usage=True,
